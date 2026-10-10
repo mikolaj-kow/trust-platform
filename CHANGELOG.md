@@ -10,6 +10,11 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Make textual actions callable by name (CODESYS vendor extension): bare
+  `action_name()` inside the owning POU, `POU.action_name()`, and
+  `instance.action_name()`; calls take no arguments and produce no value,
+  and a same-named variable still shadows the action outside call
+  position.
 - Support CODESYS program-singleton access (vendor extension):
   `Program.member` reads/writes across programs (including function-block
   instances), and `ProgramName();` invokes another program body; a bare
@@ -913,6 +918,11 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Make textual actions callable by name (CODESYS vendor extension): bare
+  `action_name()` inside the owning POU, `POU.action_name()`, and
+  `instance.action_name()`; calls take no arguments and produce no value,
+  and a same-named variable still shadows the action outside call
+  position.
 - Support CODESYS program-singleton access (vendor extension):
   `Program.member` reads/writes across programs (including function-block
   instances), and `ProgramName();` invokes another program body; a bare
@@ -2108,6 +2118,11 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Make textual actions callable by name (CODESYS vendor extension): bare
+  `action_name()` inside the owning POU, `POU.action_name()`, and
+  `instance.action_name()`; calls take no arguments and produce no value,
+  and a same-named variable still shadows the action outside call
+  position.
 - Support CODESYS program-singleton access (vendor extension):
   `Program.member` reads/writes across programs (including function-block
   instances), and `ProgramName();` invokes another program body; a bare
@@ -2517,6 +2532,11 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Make textual actions callable by name (CODESYS vendor extension): bare
+  `action_name()` inside the owning POU, `POU.action_name()`, and
+  `instance.action_name()`; calls take no arguments and produce no value,
+  and a same-named variable still shadows the action outside call
+  position.
 - Support CODESYS program-singleton access (vendor extension):
   `Program.member` reads/writes across programs (including function-block
   instances), and `ProgramName();` invokes another program body; a bare
@@ -2658,6 +2678,11 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Make textual actions callable by name (CODESYS vendor extension): bare
+  `action_name()` inside the owning POU, `POU.action_name()`, and
+  `instance.action_name()`; calls take no arguments and produce no value,
+  and a same-named variable still shadows the action outside call
+  position.
 - Support CODESYS program-singleton access (vendor extension):
   `Program.member` reads/writes across programs (including function-block
   instances), and `ProgramName();` invokes another program body; a bare

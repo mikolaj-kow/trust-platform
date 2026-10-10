@@ -43,6 +43,7 @@ fn non_value_role(kind: &SymbolKind) -> Option<&'static str> {
         SymbolKind::Resource => Some("resource"),
         SymbolKind::Task => Some("task"),
         SymbolKind::ProgramInstance => Some("program instance"),
+        SymbolKind::Action => Some("action"),
         SymbolKind::Variable { .. }
         | SymbolKind::Constant
         | SymbolKind::EnumValue { .. }
