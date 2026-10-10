@@ -10,6 +10,9 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Accept the CODESYS-style `REFERENCE TO T` spelling as a vendor-style alias
+  for the IEC `REF_TO T` reference type, with the same declaration rules and
+  semantics.
 - Add the NUCLEO-F401RE reference composition for the shared runtime, with bounded memory, separately installed STBC artifacts, and remote GPIO/watchdog evidence tooling. The full-function F401 bring-up passes saved-artifact traces, numeric checks, GPIO safe outputs, depth-four calls and independent-watchdog reset; production qualification remains separate.
 
 - Add explicit STBC 2.0 authoring and portable byte-level validation for declared
@@ -893,6 +896,9 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Accept the CODESYS-style `REFERENCE TO T` spelling as a vendor-style alias
+  for the IEC `REF_TO T` reference type, with the same declaration rules and
+  semantics.
 - vscode/trust-runtime: Devices & Connections can select any valid ADS server
   port before browsing symbols, defaults to PLC port `851`, preserves non-851
   ports through browse/import/`ads.toml`, and distinguishes an unavailable ADS
@@ -2068,6 +2074,9 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Accept the CODESYS-style `REFERENCE TO T` spelling as a vendor-style alias
+  for the IEC `REF_TO T` reference type, with the same declaration rules and
+  semantics.
 - Structured Text initializers now support named aggregate defaults for
   `STRUCT`/`UNION` values at VAR, TYPE, and member-default sites, route those
   defaults through a runtime initializer service, validate unknown/duplicate
@@ -2457,6 +2466,9 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Accept the CODESYS-style `REFERENCE TO T` spelling as a vendor-style alias
+  for the IEC `REF_TO T` reference type, with the same declaration rules and
+  semantics.
 - `libraries/oscat` now ships the full manual-aligned OSCAT chapter set
   (`03_data_types` through `26_list_processing`) as the primary OSCAT package,
   including the OSCAT_BUILDING Chapter 23 control/environmental surface, a
@@ -2578,6 +2590,9 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Accept the CODESYS-style `REFERENCE TO T` spelling as a vendor-style alias
+  for the IEC `REF_TO T` reference type, with the same declaration rules and
+  semantics.
 - Shipped the first PLCopen Motion library profile in Structured Text: Part 1 single-axis classic core, Part 1 synchronization cam/gear subset, Part 4 coordinated-motion core subset, and Part 5 homing core subset, with a compliance matrix, user-facing guide, deferred-surface guards, and deterministic ST conformance fixtures.
 - truST now accepts namespaced vendor-style GVL declarations (`NAMESPACE ... VAR_GLOBAL ... END_NAMESPACE`) and resolves qualified access such as `GVL.shared` in both HIR and runtime execution.
 - truST now records vendor-parity global access explicitly: top-level GVLs, namespaced GVLs, and direct global access without mandatory `VAR_EXTERNAL` are documented and covered by regression tests.
