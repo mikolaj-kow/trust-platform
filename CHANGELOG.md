@@ -10,6 +10,10 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Auto-dereference `REFERENCE TO` values (CODESYS parity): member access,
+  indexing, arithmetic, and assignment copy through a reference without `^`;
+  assignment between two references still rebinds. `POINTER TO` keeps
+  requiring explicit `^` and stays rejected in arithmetic.
 - Add the CODESYS-style `REF=` reference-rebinding statement as a vendor
   extension: `ref REF= variable` rebinds to the variable's storage,
   `ref1 REF= ref2` rebinds to a compatible reference target, and
@@ -901,6 +905,10 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Auto-dereference `REFERENCE TO` values (CODESYS parity): member access,
+  indexing, arithmetic, and assignment copy through a reference without `^`;
+  assignment between two references still rebinds. `POINTER TO` keeps
+  requiring explicit `^` and stays rejected in arithmetic.
 - Add the CODESYS-style `REF=` reference-rebinding statement as a vendor
   extension: `ref REF= variable` rebinds to the variable's storage,
   `ref1 REF= ref2` rebinds to a compatible reference target, and
@@ -2084,6 +2092,10 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Auto-dereference `REFERENCE TO` values (CODESYS parity): member access,
+  indexing, arithmetic, and assignment copy through a reference without `^`;
+  assignment between two references still rebinds. `POINTER TO` keeps
+  requiring explicit `^` and stays rejected in arithmetic.
 - Add the CODESYS-style `REF=` reference-rebinding statement as a vendor
   extension: `ref REF= variable` rebinds to the variable's storage,
   `ref1 REF= ref2` rebinds to a compatible reference target, and
@@ -2481,6 +2493,10 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Auto-dereference `REFERENCE TO` values (CODESYS parity): member access,
+  indexing, arithmetic, and assignment copy through a reference without `^`;
+  assignment between two references still rebinds. `POINTER TO` keeps
+  requiring explicit `^` and stays rejected in arithmetic.
 - Add the CODESYS-style `REF=` reference-rebinding statement as a vendor
   extension: `ref REF= variable` rebinds to the variable's storage,
   `ref1 REF= ref2` rebinds to a compatible reference target, and
@@ -2610,6 +2626,10 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Auto-dereference `REFERENCE TO` values (CODESYS parity): member access,
+  indexing, arithmetic, and assignment copy through a reference without `^`;
+  assignment between two references still rebinds. `POINTER TO` keeps
+  requiring explicit `^` and stays rejected in arithmetic.
 - Add the CODESYS-style `REF=` reference-rebinding statement as a vendor
   extension: `ref REF= variable` rebinds to the variable's storage,
   `ref1 REF= ref2` rebinds to a compatible reference target, and
