@@ -10,6 +10,11 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Add the CODESYS-style `REF=` reference-rebinding statement as a vendor
+  extension: `ref REF= variable` rebinds to the variable's storage,
+  `ref1 REF= ref2` rebinds to a compatible reference target, and
+  `ref REF= NULL` (or `0`) clears the reference; value and pointer targets
+  are rejected.
 - Accept the CODESYS-style `REFERENCE TO T` spelling as a vendor-style alias
   for the IEC `REF_TO T` reference type, with the same declaration rules and
   semantics.
@@ -896,6 +901,11 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Add the CODESYS-style `REF=` reference-rebinding statement as a vendor
+  extension: `ref REF= variable` rebinds to the variable's storage,
+  `ref1 REF= ref2` rebinds to a compatible reference target, and
+  `ref REF= NULL` (or `0`) clears the reference; value and pointer targets
+  are rejected.
 - Accept the CODESYS-style `REFERENCE TO T` spelling as a vendor-style alias
   for the IEC `REF_TO T` reference type, with the same declaration rules and
   semantics.
@@ -2074,6 +2084,11 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Add the CODESYS-style `REF=` reference-rebinding statement as a vendor
+  extension: `ref REF= variable` rebinds to the variable's storage,
+  `ref1 REF= ref2` rebinds to a compatible reference target, and
+  `ref REF= NULL` (or `0`) clears the reference; value and pointer targets
+  are rejected.
 - Accept the CODESYS-style `REFERENCE TO T` spelling as a vendor-style alias
   for the IEC `REF_TO T` reference type, with the same declaration rules and
   semantics.
@@ -2466,6 +2481,11 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Add the CODESYS-style `REF=` reference-rebinding statement as a vendor
+  extension: `ref REF= variable` rebinds to the variable's storage,
+  `ref1 REF= ref2` rebinds to a compatible reference target, and
+  `ref REF= NULL` (or `0`) clears the reference; value and pointer targets
+  are rejected.
 - Accept the CODESYS-style `REFERENCE TO T` spelling as a vendor-style alias
   for the IEC `REF_TO T` reference type, with the same declaration rules and
   semantics.
@@ -2590,6 +2610,11 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Add the CODESYS-style `REF=` reference-rebinding statement as a vendor
+  extension: `ref REF= variable` rebinds to the variable's storage,
+  `ref1 REF= ref2` rebinds to a compatible reference target, and
+  `ref REF= NULL` (or `0`) clears the reference; value and pointer targets
+  are rejected.
 - Accept the CODESYS-style `REFERENCE TO T` spelling as a vendor-style alias
   for the IEC `REF_TO T` reference type, with the same declaration rules and
   semantics.
