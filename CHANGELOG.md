@@ -10,6 +10,8 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Accept enum-typed array subscripts (enum values and enum-typed variables)
+  as a CODESYS vendor extension, alongside the IEC ANY_INT subscripts.
 - Accept `RETAIN PERSISTENT` in state-owning variable sections as a
   WAGO/CODESYS vendor extension (persistent implies retention);
   `NON_RETAIN` combinations and duplicate qualifiers remain errors.
@@ -921,6 +923,8 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Accept enum-typed array subscripts (enum values and enum-typed variables)
+  as a CODESYS vendor extension, alongside the IEC ANY_INT subscripts.
 - Accept `RETAIN PERSISTENT` in state-owning variable sections as a
   WAGO/CODESYS vendor extension (persistent implies retention);
   `NON_RETAIN` combinations and duplicate qualifiers remain errors.
@@ -2124,6 +2128,8 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Accept enum-typed array subscripts (enum values and enum-typed variables)
+  as a CODESYS vendor extension, alongside the IEC ANY_INT subscripts.
 - Accept `RETAIN PERSISTENT` in state-owning variable sections as a
   WAGO/CODESYS vendor extension (persistent implies retention);
   `NON_RETAIN` combinations and duplicate qualifiers remain errors.
@@ -2541,6 +2547,8 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Accept enum-typed array subscripts (enum values and enum-typed variables)
+  as a CODESYS vendor extension, alongside the IEC ANY_INT subscripts.
 - Accept `RETAIN PERSISTENT` in state-owning variable sections as a
   WAGO/CODESYS vendor extension (persistent implies retention);
   `NON_RETAIN` combinations and duplicate qualifiers remain errors.
@@ -2690,6 +2698,8 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Accept enum-typed array subscripts (enum values and enum-typed variables)
+  as a CODESYS vendor extension, alongside the IEC ANY_INT subscripts.
 - Accept `RETAIN PERSISTENT` in state-owning variable sections as a
   WAGO/CODESYS vendor extension (persistent implies retention);
   `NON_RETAIN` combinations and duplicate qualifiers remain errors.
