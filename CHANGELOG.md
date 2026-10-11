@@ -10,6 +10,10 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Import CODESYS `pouType="action"` PLCopen POUs: `Parent.Action` names
+  merge into the parent POU as textual `ACTION` blocks (`PLCO219` info);
+  body-less actions skip with `PLCO204`, and actions without parent linkage
+  keep the `PLCO203` fail-closed skip.
 - Make function-block and program `VAR_INPUT` members writable (CODESYS
   parity): the owning body and external POUs may assign them between calls.
   Function/method parameters stay call-local, and pointer/reference input
@@ -932,6 +936,10 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Import CODESYS `pouType="action"` PLCopen POUs: `Parent.Action` names
+  merge into the parent POU as textual `ACTION` blocks (`PLCO219` info);
+  body-less actions skip with `PLCO204`, and actions without parent linkage
+  keep the `PLCO203` fail-closed skip.
 - Make function-block and program `VAR_INPUT` members writable (CODESYS
   parity): the owning body and external POUs may assign them between calls.
   Function/method parameters stay call-local, and pointer/reference input
@@ -2146,6 +2154,10 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Import CODESYS `pouType="action"` PLCopen POUs: `Parent.Action` names
+  merge into the parent POU as textual `ACTION` blocks (`PLCO219` info);
+  body-less actions skip with `PLCO204`, and actions without parent linkage
+  keep the `PLCO203` fail-closed skip.
 - Make function-block and program `VAR_INPUT` members writable (CODESYS
   parity): the owning body and external POUs may assign them between calls.
   Function/method parameters stay call-local, and pointer/reference input
@@ -2574,6 +2586,10 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Import CODESYS `pouType="action"` PLCopen POUs: `Parent.Action` names
+  merge into the parent POU as textual `ACTION` blocks (`PLCO219` info);
+  body-less actions skip with `PLCO204`, and actions without parent linkage
+  keep the `PLCO203` fail-closed skip.
 - Make function-block and program `VAR_INPUT` members writable (CODESYS
   parity): the owning body and external POUs may assign them between calls.
   Function/method parameters stay call-local, and pointer/reference input
@@ -2734,6 +2750,10 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Import CODESYS `pouType="action"` PLCopen POUs: `Parent.Action` names
+  merge into the parent POU as textual `ACTION` blocks (`PLCO219` info);
+  body-less actions skip with `PLCO204`, and actions without parent linkage
+  keep the `PLCO203` fail-closed skip.
 - Make function-block and program `VAR_INPUT` members writable (CODESYS
   parity): the owning body and external POUs may assign them between calls.
   Function/method parameters stay call-local, and pointer/reference input
