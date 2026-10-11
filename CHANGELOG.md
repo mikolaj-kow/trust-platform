@@ -10,6 +10,10 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Tolerate identical duplicate declarations in PLCopen `globalVars` lists
+  (e!COCKPIT MixedAttrsVarList parity): repeats are dropped with a
+  `PLCO605` info instead of skipping the whole list; conflicting
+  redefinitions still reject the list (`PLCO604`).
 - Import CODESYS `pouType="action"` PLCopen POUs: `Parent.Action` names
   merge into the parent POU as textual `ACTION` blocks (`PLCO219` info);
   body-less actions skip with `PLCO204`, and actions without parent linkage
@@ -936,6 +940,10 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Tolerate identical duplicate declarations in PLCopen `globalVars` lists
+  (e!COCKPIT MixedAttrsVarList parity): repeats are dropped with a
+  `PLCO605` info instead of skipping the whole list; conflicting
+  redefinitions still reject the list (`PLCO604`).
 - Import CODESYS `pouType="action"` PLCopen POUs: `Parent.Action` names
   merge into the parent POU as textual `ACTION` blocks (`PLCO219` info);
   body-less actions skip with `PLCO204`, and actions without parent linkage
@@ -2154,6 +2162,10 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Tolerate identical duplicate declarations in PLCopen `globalVars` lists
+  (e!COCKPIT MixedAttrsVarList parity): repeats are dropped with a
+  `PLCO605` info instead of skipping the whole list; conflicting
+  redefinitions still reject the list (`PLCO604`).
 - Import CODESYS `pouType="action"` PLCopen POUs: `Parent.Action` names
   merge into the parent POU as textual `ACTION` blocks (`PLCO219` info);
   body-less actions skip with `PLCO204`, and actions without parent linkage
@@ -2586,6 +2598,10 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Tolerate identical duplicate declarations in PLCopen `globalVars` lists
+  (e!COCKPIT MixedAttrsVarList parity): repeats are dropped with a
+  `PLCO605` info instead of skipping the whole list; conflicting
+  redefinitions still reject the list (`PLCO604`).
 - Import CODESYS `pouType="action"` PLCopen POUs: `Parent.Action` names
   merge into the parent POU as textual `ACTION` blocks (`PLCO219` info);
   body-less actions skip with `PLCO204`, and actions without parent linkage
@@ -2750,6 +2766,10 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Tolerate identical duplicate declarations in PLCopen `globalVars` lists
+  (e!COCKPIT MixedAttrsVarList parity): repeats are dropped with a
+  `PLCO605` info instead of skipping the whole list; conflicting
+  redefinitions still reject the list (`PLCO604`).
 - Import CODESYS `pouType="action"` PLCopen POUs: `Parent.Action` names
   merge into the parent POU as textual `ACTION` blocks (`PLCO219` info);
   body-less actions skip with `PLCO204`, and actions without parent linkage
