@@ -10,6 +10,9 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Accept `RETAIN PERSISTENT` in state-owning variable sections as a
+  WAGO/CODESYS vendor extension (persistent implies retention);
+  `NON_RETAIN` combinations and duplicate qualifiers remain errors.
 - Make textual actions callable by name (CODESYS vendor extension): bare
   `action_name()` inside the owning POU, `POU.action_name()`, and
   `instance.action_name()`; calls take no arguments and produce no value,
@@ -918,6 +921,9 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Accept `RETAIN PERSISTENT` in state-owning variable sections as a
+  WAGO/CODESYS vendor extension (persistent implies retention);
+  `NON_RETAIN` combinations and duplicate qualifiers remain errors.
 - Make textual actions callable by name (CODESYS vendor extension): bare
   `action_name()` inside the owning POU, `POU.action_name()`, and
   `instance.action_name()`; calls take no arguments and produce no value,
@@ -2118,6 +2124,9 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Accept `RETAIN PERSISTENT` in state-owning variable sections as a
+  WAGO/CODESYS vendor extension (persistent implies retention);
+  `NON_RETAIN` combinations and duplicate qualifiers remain errors.
 - Make textual actions callable by name (CODESYS vendor extension): bare
   `action_name()` inside the owning POU, `POU.action_name()`, and
   `instance.action_name()`; calls take no arguments and produce no value,
@@ -2532,6 +2541,9 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Accept `RETAIN PERSISTENT` in state-owning variable sections as a
+  WAGO/CODESYS vendor extension (persistent implies retention);
+  `NON_RETAIN` combinations and duplicate qualifiers remain errors.
 - Make textual actions callable by name (CODESYS vendor extension): bare
   `action_name()` inside the owning POU, `POU.action_name()`, and
   `instance.action_name()`; calls take no arguments and produce no value,
@@ -2678,6 +2690,9 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Accept `RETAIN PERSISTENT` in state-owning variable sections as a
+  WAGO/CODESYS vendor extension (persistent implies retention);
+  `NON_RETAIN` combinations and duplicate qualifiers remain errors.
 - Make textual actions callable by name (CODESYS vendor extension): bare
   `action_name()` inside the owning POU, `POU.action_name()`, and
   `instance.action_name()`; calls take no arguments and produce no value,
