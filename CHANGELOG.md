@@ -10,6 +10,10 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Make function-block and program `VAR_INPUT` members writable (CODESYS
+  parity): the owning body and external POUs may assign them between calls.
+  Function/method parameters stay call-local, and pointer/reference input
+  slots keep the read-only-slot policy.
 - Accept a dangling output binding `out =>` (no target) in call argument
   lists as a CODESYS vendor extension: the output is explicitly discarded
   and the call stays valid; a dangling target after `:=` remains an error.
@@ -928,6 +932,10 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Make function-block and program `VAR_INPUT` members writable (CODESYS
+  parity): the owning body and external POUs may assign them between calls.
+  Function/method parameters stay call-local, and pointer/reference input
+  slots keep the read-only-slot policy.
 - Accept a dangling output binding `out =>` (no target) in call argument
   lists as a CODESYS vendor extension: the output is explicitly discarded
   and the call stays valid; a dangling target after `:=` remains an error.
@@ -2138,6 +2146,10 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Make function-block and program `VAR_INPUT` members writable (CODESYS
+  parity): the owning body and external POUs may assign them between calls.
+  Function/method parameters stay call-local, and pointer/reference input
+  slots keep the read-only-slot policy.
 - Accept a dangling output binding `out =>` (no target) in call argument
   lists as a CODESYS vendor extension: the output is explicitly discarded
   and the call stays valid; a dangling target after `:=` remains an error.
@@ -2562,6 +2574,10 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Make function-block and program `VAR_INPUT` members writable (CODESYS
+  parity): the owning body and external POUs may assign them between calls.
+  Function/method parameters stay call-local, and pointer/reference input
+  slots keep the read-only-slot policy.
 - Accept a dangling output binding `out =>` (no target) in call argument
   lists as a CODESYS vendor extension: the output is explicitly discarded
   and the call stays valid; a dangling target after `:=` remains an error.
@@ -2718,6 +2734,10 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Make function-block and program `VAR_INPUT` members writable (CODESYS
+  parity): the owning body and external POUs may assign them between calls.
+  Function/method parameters stay call-local, and pointer/reference input
+  slots keep the read-only-slot policy.
 - Accept a dangling output binding `out =>` (no target) in call argument
   lists as a CODESYS vendor extension: the output is explicitly discarded
   and the call stays valid; a dangling target after `:=` remains an error.
