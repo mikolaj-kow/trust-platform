@@ -262,6 +262,16 @@ jobs:
           path: |
             gate-artifacts/test-${{ matrix.os }}.log
             gate-artifacts/test-${{ matrix.os }}-retry-rescued.txt
+      - name: Upload Windows editor binaries (debug)
+        if: ${{ matrix.os == 'windows-latest' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: trust-windows-debug-binaries
+          path: |
+            target/debug/trust-lsp.exe
+            target/debug/trust-dev.exe
+            target/debug/trust-runtime.exe
+          if-no-files-found: error
       - name: Mark gate success
         if: ${{ success() }}
         shell: bash
