@@ -10,6 +10,9 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Diagnose a DUT `EXTENDS` clause whose base names no declared type
+  (`cannot resolve type '<base>'`, `E102`); the derived struct was
+  previously accepted silently and inherited from nothing.
 - Tolerate identical duplicate declarations in PLCopen `globalVars` lists
   (e!COCKPIT MixedAttrsVarList parity): repeats are dropped with a
   `PLCO605` info instead of skipping the whole list; conflicting
@@ -940,6 +943,9 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Diagnose a DUT `EXTENDS` clause whose base names no declared type
+  (`cannot resolve type '<base>'`, `E102`); the derived struct was
+  previously accepted silently and inherited from nothing.
 - Tolerate identical duplicate declarations in PLCopen `globalVars` lists
   (e!COCKPIT MixedAttrsVarList parity): repeats are dropped with a
   `PLCO605` info instead of skipping the whole list; conflicting
@@ -2162,6 +2168,9 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Diagnose a DUT `EXTENDS` clause whose base names no declared type
+  (`cannot resolve type '<base>'`, `E102`); the derived struct was
+  previously accepted silently and inherited from nothing.
 - Tolerate identical duplicate declarations in PLCopen `globalVars` lists
   (e!COCKPIT MixedAttrsVarList parity): repeats are dropped with a
   `PLCO605` info instead of skipping the whole list; conflicting
@@ -2598,6 +2607,9 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Diagnose a DUT `EXTENDS` clause whose base names no declared type
+  (`cannot resolve type '<base>'`, `E102`); the derived struct was
+  previously accepted silently and inherited from nothing.
 - Tolerate identical duplicate declarations in PLCopen `globalVars` lists
   (e!COCKPIT MixedAttrsVarList parity): repeats are dropped with a
   `PLCO605` info instead of skipping the whole list; conflicting
@@ -2766,6 +2778,9 @@ Target release: `v0.24.74`
 
 ### Added
 
+- Diagnose a DUT `EXTENDS` clause whose base names no declared type
+  (`cannot resolve type '<base>'`, `E102`); the derived struct was
+  previously accepted silently and inherited from nothing.
 - Tolerate identical duplicate declarations in PLCopen `globalVars` lists
   (e!COCKPIT MixedAttrsVarList parity): repeats are dropped with a
   `PLCO605` info instead of skipping the whole list; conflicting
