@@ -271,6 +271,20 @@ impl SymbolCollector<'_> {
     ) -> Option<InitializerConstViolation> {
         let parts = qualified_const_parts(node)?;
         let name = parts.last()?.clone();
+        // CODESYS qualified enum member access (`EnumType.Member`): the
+        // referenced value is a constant of the enum type.
+        if parts.len() >= 2
+            && self
+                .table
+                .qualified_enum_member_type(
+                    &parts[..parts.len() - 1].join("."),
+                    name.as_str(),
+                    scope,
+                )
+                .is_some()
+        {
+            return None;
+        }
         let symbol_id = match self.resolve_initializer_reference(&parts, scope) {
             InitializerReferenceResolution::Found(symbol_id) => symbol_id,
             InitializerReferenceResolution::Ambiguous => {
@@ -278,21 +292,19 @@ impl SymbolCollector<'_> {
                     .then_some(InitializerConstViolation::Ambiguous(name));
             }
             InitializerReferenceResolution::NotFound => {
-                if parts.len() > 1 {
-                    if let InitializerReferenceResolution::Found(base_id) =
+                if parts.len() > 1
+                    && let InitializerReferenceResolution::Found(base_id) =
                         self.resolve_initializer_reference(&parts[..1], scope)
-                    {
-                        if self.table.get(base_id).is_some_and(|symbol| {
-                            matches!(
-                                symbol.kind,
-                                SymbolKind::Variable { .. }
-                                    | SymbolKind::Parameter { .. }
-                                    | SymbolKind::Property { .. }
-                            )
-                        }) {
-                            return Some(InitializerConstViolation::Mutable(parts[0].clone()));
-                        }
-                    }
+                    && self.table.get(base_id).is_some_and(|symbol| {
+                        matches!(
+                            symbol.kind,
+                            SymbolKind::Variable { .. }
+                                | SymbolKind::Parameter { .. }
+                                | SymbolKind::Property { .. }
+                        )
+                    })
+                {
+                    return Some(InitializerConstViolation::Mutable(parts[0].clone()));
                 }
                 return report_resolution_failure
                     .then_some(InitializerConstViolation::Undefined(name));
@@ -341,10 +353,20 @@ impl SymbolCollector<'_> {
         scope: ScopeId,
     ) -> InitializerReferenceResolution {
         if parts.len() > 1 {
-            return self.table.resolve_qualified(parts).map_or(
-                InitializerReferenceResolution::NotFound,
-                InitializerReferenceResolution::Found,
-            );
+            if let Some(symbol_id) = self.table.resolve_qualified(parts) {
+                return InitializerReferenceResolution::Found(symbol_id);
+            }
+            // CODESYS qualified enum member access (`EnumType.Member`,
+            // optionally namespace-qualified): the type-qualified form
+            // resolves to the enum's value, a legal constant initializer.
+            let (type_parts, member) = parts.split_at(parts.len() - 1);
+            if let Some(type_symbol) =
+                self.table
+                    .enum_type_member_symbol(type_parts, member[0].as_str(), scope)
+            {
+                return InitializerReferenceResolution::Found(type_symbol);
+            }
+            return InitializerReferenceResolution::NotFound;
         }
         let Some(name) = parts.first() else {
             return InitializerReferenceResolution::NotFound;
@@ -357,13 +379,13 @@ impl SymbolCollector<'_> {
             if let Some(symbol_id) = self.table.lookup_in_scope(current, name.as_str()) {
                 return InitializerReferenceResolution::Found(symbol_id);
             }
-            if matches!(scope_data.kind, ScopeKind::Class | ScopeKind::FunctionBlock) {
-                if let Some(symbol_id) = scope_data.owner.and_then(|owner| {
+            if matches!(scope_data.kind, ScopeKind::Class | ScopeKind::FunctionBlock)
+                && let Some(symbol_id) = scope_data.owner.and_then(|owner| {
                     self.table
                         .resolve_member_symbol_in_hierarchy(owner, name.as_str())
-                }) {
-                    return InitializerReferenceResolution::Found(symbol_id);
-                }
+                })
+            {
+                return InitializerReferenceResolution::Found(symbol_id);
             }
             match self.table.resolve_using_in_scope(scope_data, name.as_str()) {
                 UsingResolution::Single(symbol_id) => {

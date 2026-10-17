@@ -28,6 +28,13 @@ Implementation owners:
 - `crates/trust-runtime/src/connectors/adapters/mqtt.rs`: projection into the
   shared connector-status contract, without transport behavior.
 
+The Rust 1.99 / edition 2024 modernization in
+[`34-runtime-portability.md`](34-runtime-portability.md) §16 rewrites nested MQTT
+guards as let chains while preserving their evaluation order, short-circuiting
+and binding scope. It does not change mapping validation, payload conversion,
+topic selection, session/reconnection behavior, security, driver health or the
+process-image exchange contract defined here.
+
 ## 2. Project configuration authority
 
 For a project-folder run, the runtime loads `io.toml` from the project root. An
@@ -80,6 +87,17 @@ not by itself prove a broker handshake.
 
 Username and password are an all-or-nothing pair. Secrets must not appear in
 connector reports, audit details, discovery results, or diagnostics.
+
+A redacted web or IDE configuration edit may retain a stored MQTT password only
+when its authentication context is unchanged. The same MQTT parser used for
+connection setup supplies the effective host/port, TLS material and trimmed
+CA/client-certificate/key paths, ALPN, username, client ID and insecure-remote
+policy for this comparison, including defaults. This applies to both `mqtt`
+and `mqtt-tcp`. Topic, mapping and timing edits do not change that context.
+Changing it requires explicit replacement credentials, and a rejected edit
+writes nothing. Specification 11 §6.9.7 defines the shared JSON/text/IDE save
+contract, literal-marker handling and credential-safe errors. This comparison
+does not freeze external DNS or file contents at an unchanged TLS path.
 
 ## 4. Exchange modes and fallback selection
 

@@ -133,6 +133,7 @@ pub(in crate::web::ide) fn symbol_kind_label(
         SymbolKind::Resource => "resource",
         SymbolKind::Task => "task",
         SymbolKind::ProgramInstance => "program_instance",
+        SymbolKind::Action => "action",
         SymbolKind::Namespace => "namespace",
         SymbolKind::Function { .. } => "function",
         SymbolKind::FunctionBlock => "function_block",
@@ -157,10 +158,10 @@ pub(in crate::web::ide) fn extract_symbol_hits(
     let query = query.trim().to_ascii_lowercase();
     let mut hits = Vec::new();
     for (path, file_id) in &context.file_id_by_path {
-        if let Some(expected) = filter_path {
-            if path != expected {
-                continue;
-            }
+        if let Some(expected) = filter_path
+            && path != expected
+        {
+            continue;
         }
         let symbols = context.db.file_symbols(*file_id);
         let Some(source) = context.text_by_file.get(file_id) else {

@@ -3,6 +3,11 @@
 **/*.rs.bk
 **/Cargo.lock
 !/Cargo.lock
+!/firmware/trust-nucleo-f401re/Cargo.lock
+!/fuzz/Cargo.lock
+!/crates/trust-ads-server/fuzz/Cargo.lock
+/firmware/trust-nucleo-f401re/target/
+/firmware/trust-nucleo-f401re/*.map
 /.mapping-transaction.lock
 /site/
 /.venv-docs/
@@ -34,7 +39,6 @@ scripts/captures/playwright-report/
 
 # Local tooling caches
 .claude/
-.codex/skills/
 .venv/
 __pycache__/
 .claude-plugin/
@@ -110,6 +114,7 @@ docs/internal/architecture/*
 docs/internal/testing/*
 !docs/internal/testing/checklists/
 docs/internal/testing/checklists/*
+!docs/internal/testing/checklists/runtime-portability-implementation-checklist.md
 !docs/internal/testing/checklists/hmi-complete-implementation-checklist.md
 !docs/internal/testing/checklists/web-ide-full-implementation-checklist.md
 !docs/internal/testing/checklists/ld-specification-detailed-checklist.md
@@ -167,5 +172,6 @@ docs/internal/testing/evidence/*
 !docs/internal/references/PLCopenMotion/
 conformance/reports/*
 !conformance/reports/.gitkeep
-AGENTS.md
-CLAUDE.md
+
+# Task-owned raw validation artifacts live outside the source tree.
+/.artifacts/

@@ -1,5 +1,4 @@
 impl<'a, 'b> StmtChecker<'a, 'b> {
-
     fn check_return_stmt(&mut self, node: &SyntaxNode) {
         let return_expr = node.children().find(|n| is_expression_kind(n.kind()));
         if return_expr.is_some() {
@@ -26,8 +25,7 @@ impl<'a, 'b> StmtChecker<'a, 'b> {
                 }
             }
             (Some(expected), None)
-                if expected != TypeId::VOID
-                    && !self.checker.return_value_definitely_assigned =>
+                if expected != TypeId::VOID && !self.checker.return_value_definitely_assigned =>
             {
                 self.checker.diagnostics.error(
                     DiagnosticCode::MissingReturn,
@@ -46,20 +44,19 @@ impl<'a, 'b> StmtChecker<'a, 'b> {
         }
     }
 
-
     /// Emits missing return diagnostics after statement checks.
     pub fn finish_return_checks(&mut self, node: &SyntaxNode) {
-        if let Some(expected) = self.checker.current_function_return {
-            if expected != TypeId::VOID && !self.checker.saw_return_value {
-                self.checker.diagnostics.error(
-                    DiagnosticCode::MissingReturn,
-                    node.text_range(),
-                    "missing return value",
-                );
-            }
+        if let Some(expected) = self.checker.current_function_return
+            && expected != TypeId::VOID
+            && !self.checker.saw_return_value
+        {
+            self.checker.diagnostics.error(
+                DiagnosticCode::MissingReturn,
+                node.text_range(),
+                "missing return value",
+            );
         }
     }
-
 
     fn check_expr_stmt(&mut self, node: &SyntaxNode) {
         // Just type-check the expression to catch any errors
@@ -67,7 +64,6 @@ impl<'a, 'b> StmtChecker<'a, 'b> {
             self.check_expression(&expr);
         }
     }
-
 
     fn check_statement_children(&mut self, node: &SyntaxNode) {
         for child in node.children() {
@@ -77,8 +73,11 @@ impl<'a, 'b> StmtChecker<'a, 'b> {
         }
     }
 
-
-    fn check_statement_children_with_state(&mut self, node: &SyntaxNode, initial_state: bool) -> bool {
+    fn check_statement_children_with_state(
+        &mut self,
+        node: &SyntaxNode,
+        initial_state: bool,
+    ) -> bool {
         let saved = self.checker.return_value_definitely_assigned;
         self.checker.return_value_definitely_assigned = initial_state;
         self.check_statement_children(node);
@@ -86,7 +85,6 @@ impl<'a, 'b> StmtChecker<'a, 'b> {
         self.checker.return_value_definitely_assigned = saved;
         exit_state
     }
-
 
     pub(super) fn check_loop_restriction(&mut self, symbol_id: SymbolId, range: TextRange) {
         for ctx in &self.checker.loop_stack {
@@ -100,7 +98,6 @@ impl<'a, 'b> StmtChecker<'a, 'b> {
             }
         }
     }
-
 
     fn record_case_label_value(
         &mut self,
@@ -124,7 +121,6 @@ impl<'a, 'b> StmtChecker<'a, 'b> {
 
         tracker.ints.insert(value, range);
     }
-
 
     fn record_case_label_range(
         &mut self,
@@ -163,6 +159,113 @@ impl<'a, 'b> StmtChecker<'a, 'b> {
         tracker.ranges.push((lower, upper));
     }
 
+    fn reference_bind_target(&self, type_id: TypeId) -> Option<TypeId> {
+        let resolved = self.checker.resolve_alias_type(type_id);
+        match self.checker.symbols.type_by_id(resolved)? {
+            Type::Reference { target } => Some(*target),
+            _ => None,
+        }
+    }
+
+    fn check_ref_bind_assignment(&mut self, target: &SyntaxNode, value: &SyntaxNode) {
+        let target_type = self.checker.expr().check_expression(target);
+        let value_type = self.checker.expr().check_expression(value);
+
+        if target_type == TypeId::UNKNOWN || value_type == TypeId::UNKNOWN {
+            return;
+        }
+
+        let Some(referenced) = self.reference_bind_target(target_type) else {
+            self.checker.diagnostics.error(
+                DiagnosticCode::TypeMismatch,
+                target.text_range(),
+                "REF= target must be a REFERENCE variable",
+            );
+            return;
+        };
+
+        if value_type == TypeId::NULL {
+            return;
+        }
+
+        // `ref REF= 0` clears the reference (CODESYS parity).
+        if value.kind() == SyntaxKind::Literal && value.text().to_string().trim() == "0" {
+            return;
+        }
+
+        let resolved_value = self.checker.resolve_alias_type(value_type);
+        match self.checker.symbols.type_by_id(resolved_value) {
+            Some(Type::Pointer { .. }) => {
+                self.checker.diagnostics.error(
+                    DiagnosticCode::TypeMismatch,
+                    value.text_range(),
+                    "REF= source must be a REFERENCE or an assignable variable; use REF() for pointers",
+                );
+            }
+            Some(Type::Reference { .. }) => {
+                let Some(source) = self.reference_bind_target(value_type) else {
+                    return;
+                };
+                let compatible = self.checker.reference_types_compatible(referenced, source)
+                    || self.checker.reference_types_compatible(source, referenced);
+                if !compatible {
+                    let target_name = self.checker.type_name(referenced);
+                    let source_name = self.checker.type_name(source);
+                    self.checker.diagnostics.error(
+                        DiagnosticCode::TypeMismatch,
+                        value.text_range(),
+                        format!(
+                            "REF= requires compatible reference types: '{}' vs '{}'",
+                            target_name, source_name
+                        ),
+                    );
+                }
+            }
+            _ => {
+                if !self.checker.is_valid_lvalue(value) {
+                    self.checker.diagnostics.error(
+                        DiagnosticCode::TypeMismatch,
+                        value.text_range(),
+                        "REF= source must be an assignable variable or reference",
+                    );
+                    return;
+                }
+
+                let resolved_source = self.checker.assignment_target_symbol(value);
+                if let Some(resolved) = &resolved_source
+                    && !resolved.accessible
+                {
+                    return;
+                }
+                if self
+                    .checker
+                    .is_constant_target_with_resolved(value, resolved_source.as_ref())
+                {
+                    self.checker.diagnostics.error(
+                        DiagnosticCode::ConstantModification,
+                        value.text_range(),
+                        "cannot bind REF= to a constant",
+                    );
+                    return;
+                }
+
+                let compatible = resolved_value == self.checker.resolve_alias_type(referenced)
+                    || self.checker.reference_types_compatible(referenced, value_type);
+                if !compatible {
+                    let target_name = self.checker.type_name(referenced);
+                    let value_name = self.checker.type_name(value_type);
+                    self.checker.diagnostics.error(
+                        DiagnosticCode::TypeMismatch,
+                        value.text_range(),
+                        format!(
+                            "REF= requires matching types: REFERENCE TO '{}' vs '{}'",
+                            target_name, value_name
+                        ),
+                    );
+                }
+            }
+        }
+    }
 
     fn check_ref_assignment(&mut self, target: &SyntaxNode, value: &SyntaxNode) {
         let target_type = self.checker.expr().check_expression(target);
@@ -195,12 +298,13 @@ impl<'a, 'b> StmtChecker<'a, 'b> {
         };
 
         let compatible = match (target_ref, source_ref) {
-            (ReferenceAttemptOperand::Pointer(target), ReferenceAttemptOperand::Pointer(source)) => {
-                self.checker.resolve_alias_type(target)
-                    == self.checker.resolve_alias_type(source)
+            (
+                ReferenceAttemptOperand::Pointer(target),
+                ReferenceAttemptOperand::Pointer(source),
+            ) => self.checker.resolve_alias_type(target) == self.checker.resolve_alias_type(source),
+            (ReferenceAttemptOperand::Pointer(_), _) | (_, ReferenceAttemptOperand::Pointer(_)) => {
+                false
             }
-            (ReferenceAttemptOperand::Pointer(_), _)
-            | (_, ReferenceAttemptOperand::Pointer(_)) => false,
             (target, source) => {
                 let target = target.target();
                 let source = source.target();
@@ -235,7 +339,6 @@ impl<'a, 'b> StmtChecker<'a, 'b> {
         }
     }
 
-
     fn check_subrange_assignment(
         &mut self,
         target_type: TypeId,
@@ -246,23 +349,23 @@ impl<'a, 'b> StmtChecker<'a, 'b> {
             return;
         };
 
-        if let Some((_, value_lower, value_upper)) = self.checker.subrange_bounds(value_type) {
-            if value_lower >= lower && value_upper <= upper {
-                return;
-            }
+        if let Some((_, value_lower, value_upper)) = self.checker.subrange_bounds(value_type)
+            && value_lower >= lower
+            && value_upper <= upper
+        {
+            return;
         }
 
-        if let Some(value_int) = self.checker.eval_const_int_expr_or_report(value) {
-            if value_int < lower || value_int > upper {
-                self.checker.diagnostics.error(
-                    DiagnosticCode::OutOfRange,
-                    value.text_range(),
-                    format!("value {} outside subrange {}..{}", value_int, lower, upper),
-                );
-            }
+        if let Some(value_int) = self.checker.eval_const_int_expr_or_report(value)
+            && (value_int < lower || value_int > upper)
+        {
+            self.checker.diagnostics.error(
+                DiagnosticCode::OutOfRange,
+                value.text_range(),
+                format!("value {} outside subrange {}..{}", value_int, lower, upper),
+            );
         }
     }
-
 }
 
 #[derive(Clone, Copy)]

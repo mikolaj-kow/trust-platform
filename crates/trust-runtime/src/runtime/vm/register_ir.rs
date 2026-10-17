@@ -1,7 +1,9 @@
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::sync::Arc;
+#[cfg(test)]
 use std::time::Instant;
+use trust_runtime_core::vm::hosted::{budget::ExecutionEntry, context::ExecutionContext};
 
 use crate::debug::DebugHook;
 use crate::error::RuntimeError;
@@ -21,7 +23,7 @@ use super::dispatch_refs::{
     dynamic_load_ref, dynamic_ref_field, dynamic_ref_field_borrowed, dynamic_ref_index,
     dynamic_store_ref, index_to_i64, load_ref_addr, peek_ref, store_ref,
 };
-use super::dispatch_sizeof::{sizeof_error_to_runtime, sizeof_type_from_table};
+use super::dispatch_sizeof::sizeof_error_to_runtime;
 use super::errors::VmTrap;
 use super::frames::{ensure_global_call_depth, FrameStack};
 use super::stack::OperandStack;
@@ -196,7 +198,6 @@ pub(super) struct RegisterPouExecutionResult {
     pub(super) locals: Vec<Value>,
 }
 
-const REGISTER_DEADLINE_CHECK_STRIDE: usize = 32;
 const REGISTER_EXECUTION_POOL_LIMIT: usize = 64;
 
 thread_local! {
@@ -317,6 +318,7 @@ fn reset_register_file(registers: &mut [Value]) {
     }
 }
 
+mod environment;
 mod interpreter;
 mod lower;
 mod profile;
@@ -347,27 +349,16 @@ pub(in crate::runtime) use self::tier1::RegisterTier1SpecializedExecutorState;
 #[cfg(test)]
 use self::tier1::{
     apply_dint_binary_guard_borrowed, compile_tier1_block, execute_tier1_compiled_block,
-    parse_tier1_env_bool, parse_tier1_env_usize, tier1_block_key, Tier1CompiledBlock,
-    Tier1CompiledInstr,
+    tier1_block_key, Tier1CompiledBlock, Tier1CompiledInstr,
 };
 use self::tier1::{maybe_execute_tier1_block, prepare_borrowed_binary_eval};
 
 fn parse_env_bool(name: &str, default: bool) -> bool {
-    match std::env::var(name) {
-        Ok(value) => match value.trim().to_ascii_lowercase().as_str() {
-            "1" | "true" | "yes" | "on" => true,
-            "0" | "false" | "no" | "off" => false,
-            _ => default,
-        },
-        Err(_) => default,
-    }
+    environment::parse_bool(std::env::var(name).ok().as_deref(), default)
 }
 
 fn parse_env_usize(name: &str, default: usize) -> usize {
-    std::env::var(name)
-        .ok()
-        .and_then(|value| value.trim().parse::<usize>().ok())
-        .unwrap_or(default)
+    environment::parse_number(std::env::var(name).ok().as_deref(), default)
 }
 
 fn build_cached_register_program(
@@ -403,7 +394,7 @@ pub(super) fn try_execute_pou_with_register_ir(
         None,
         false,
         0,
-        None,
+        ExecutionEntry::Root,
     )?;
     if result.is_some() {
         Ok(RegisterExecutionOutcome::Executed)
@@ -421,7 +412,7 @@ pub(super) fn try_execute_pou_with_register_ir_with_locals(
     initial_locals: Option<&[Value]>,
     capture_return: bool,
     depth_offset: u32,
-    shared_budget: Option<&mut usize>,
+    entry: ExecutionEntry,
 ) -> Result<Option<RegisterPouExecutionResult>, RuntimeError> {
     // Keep stack execution as the single source of truth while debug stepping is active.
     if runtime.debug.is_some() {
@@ -459,8 +450,9 @@ pub(super) fn try_execute_pou_with_register_ir_with_locals(
         initial_locals,
         capture_return,
         depth_offset,
-        shared_budget,
+        entry,
     )?;
+    runtime.check_execution_deadline()?;
     runtime.vm_register_profile.record_executed();
     Ok(Some(result))
 }
@@ -476,8 +468,9 @@ fn execute_register_program(
     initial_locals: Option<&[Value]>,
     capture_return: bool,
     depth_offset: u32,
-    shared_budget: Option<&mut usize>,
+    entry: ExecutionEntry,
 ) -> Result<RegisterPouExecutionResult, RuntimeError> {
+    runtime.begin_execution(entry, module.instruction_budget())?;
     ensure_global_call_depth(depth_offset, 1).map_err(VmTrap::into_runtime_error)?;
     let mut register_execution_buffers =
         RegisterExecutionBuffers::acquire(program.max_registers as usize);
@@ -510,8 +503,7 @@ fn execute_register_program(
         super::local_init::initialize_declared_locals(runtime, module, frame)?;
     }
     let mut current_block = program.entry_block;
-    let mut local_budget = module.instruction_budget;
-    let budget = shared_budget.unwrap_or(&mut local_budget);
+
     let tier1_enabled = runtime.vm_tier1_specialized_executor.enabled();
     loop {
         if frames.is_empty() {
@@ -538,18 +530,16 @@ fn execute_register_program(
                 block.start_pc.try_into().unwrap_or(u32::MAX),
             );
         }
-        if runtime.debug.is_some() {
-            if let Some(location) =
+        if runtime.debug.is_some()
+            && let Some(location) =
                 register_statement_location(runtime, module, program.pou_id, block.start_pc)
-            {
-                let storage = &runtime.storage;
-                let current_time = runtime.current_time;
-                if let Some(debug) = runtime.debug.as_mut() {
-                    let call_depth =
-                        depth_offset.saturating_add(frames.len().saturating_sub(1) as u32);
-                    debug.refresh_snapshot_from_storage(storage, current_time);
-                    debug.on_statement(Some(&location), call_depth);
-                }
+        {
+            let storage = &runtime.storage;
+            let current_time = runtime.current_time;
+            if let Some(debug) = runtime.debug.as_mut() {
+                let call_depth = depth_offset.saturating_add(frames.len().saturating_sub(1) as u32);
+                debug.refresh_snapshot_from_storage(storage, current_time);
+                debug.on_statement(Some(&location), call_depth);
             }
         }
 
@@ -562,7 +552,6 @@ fn execute_register_program(
                 frames,
                 registers,
                 native_call_stack,
-                budget,
                 depth_offset,
             )? {
                 Some(outcome) => outcome,
@@ -575,7 +564,6 @@ fn execute_register_program(
                     remaining_register_reads,
                     native_call_stack,
                     block,
-                    budget,
                     depth_offset,
                 )?,
             }
@@ -589,7 +577,6 @@ fn execute_register_program(
                 remaining_register_reads,
                 native_call_stack,
                 block,
-                budget,
                 depth_offset,
             )?
         };
@@ -651,7 +638,7 @@ fn first_fallback_opcode(program: &RegisterProgram) -> Option<u8> {
 fn lowered_uses_complex_local_paths(module: &VmModule, program: &RegisterProgram) -> bool {
     let uses_complex_local_ref = |ref_idx: u32| {
         matches!(
-            module.refs.get(ref_idx as usize),
+            module.refs().get(ref_idx as usize),
             Some(super::VmRef::Local { path, .. }) if !path.is_empty()
         )
     };
@@ -727,18 +714,14 @@ fn register_statement_location(
     pou_id: u32,
     pc: usize,
 ) -> Option<crate::debug::SourceLocation> {
-    let source = module.debug_map.source_by_pc.get(&(pou_id, pc as u32))?;
+    let source = module.debug_map().source_by_pc.get(&(pou_id, pc as u32))?;
     runtime.resolve_vm_debug_location(source.file.as_str(), source.line, source.column)
 }
 
+#[cfg(test)]
 fn deadline_exceeded(deadline: Option<Instant>) -> bool {
     match deadline {
         Some(deadline) => Instant::now() >= deadline,
         None => false,
     }
-}
-
-#[inline]
-fn should_check_register_deadline(instruction_index: usize) -> bool {
-    instruction_index == 0 || instruction_index.is_multiple_of(REGISTER_DEADLINE_CHECK_STRIDE)
 }

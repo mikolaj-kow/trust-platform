@@ -76,12 +76,22 @@ def synthetic_record(command_id: str, command: str, failures: Sequence[str]) -> 
     }
 
 
-def remote_command(host: str, worktree: str, command: str) -> list[str]:
+def remote_command(
+    host: str, worktree: str, command: str, *, tool_path: str | None = None,
+    cargo_home: str | None = None,
+) -> list[str]:
+    environment = []
+    if tool_path is not None:
+        environment.append(f"PATH={tool_path}")
+    if cargo_home is not None:
+        environment.append(f"CARGO_HOME={cargo_home}")
+    if environment:
+        command = f"env {shlex.join(environment)} bash -c {shlex.quote(command)}"
     return ["ssh", host, f"cd {shlex.quote(worktree)} && {command}"]
 
 
 def remote_validation_commands(
-    *, vscode_changed: bool, remote_target: str
+    *, vscode_changed: bool, remote_target: str, pinned_environment: bool = False,
 ) -> list[tuple[str, str]]:
     target = validated_remote_target(remote_target)
     target_tmp = str(PurePosixPath(target) / "tmp")
@@ -111,18 +121,38 @@ def remote_validation_commands(
         f"install -m 755 {passthrough_source} {shlex.quote(sccache_shim)}"
     )
     def leased(command: str) -> str:
+        shell_mode = "-c" if pinned_environment else "-lc"
         return (
             "bash scripts/with_cargo_target_lease.sh "
-            f"{shlex.quote(target)} bash -lc {shlex.quote(command)}"
+            f"{shlex.quote(target)} bash {shell_mode} {shlex.quote(command)}"
         )
 
-    disk_preflight = (
-        'available_kib=$(df --output=avail -k "$HOME" | tail -n 1 | tr -d " "); '
+    disk_probe = (
+        "set -euo pipefail; "
+        f"probe=$(bash scripts/cargo_target_path.sh {shlex.quote(target)}) || exit $?; "
+        'while [ ! -e "$probe" ]; do probe=$(dirname -- "$probe"); done; '
+        'available_kib=$(df --output=avail -k "$probe" | tail -n 1 | tr -d " "); '
         "required_kib=83886080; "
-        'df -hT "$HOME" /tmp; '
+        'if ! [[ "$available_kib" =~ ^-?[0-9]+$ ]]; then '
+        'echo "cannot determine available target space" >&2; exit 1; fi; '
+    )
+    disk_floor_check = (
         'if [ "$available_kib" -lt "$required_kib" ]; then '
-        'printf "exact candidate requires at least 80 GiB free under $HOME; '
+        'printf "exact candidate requires at least 80 GiB free on the target filesystem; '
         'found %s KiB\\n" "$available_kib" >&2; exit 1; fi'
+    )
+    disk_preflight = disk_probe + 'df -hT "$HOME" /tmp "$probe"; ' + disk_floor_check
+    conditional_reclaim = (
+        disk_probe
+        + 'if [ "$available_kib" -ge "$required_kib" ]; then '
+        + 'printf "Keeping warm Cargo target: %s (%s KiB available)\\n" '
+        + f'{shlex.quote(target)} "$available_kib"; '
+        + "else "
+        + f"bash scripts/remove_cargo_target_if_idle.sh {shlex.quote(target)} || exit $?; "
+        + f"({prepare_target}) || exit $?; "
+        + disk_probe
+        + disk_floor_check
+        + "; fi"
     )
     commands = [
         ("remote_exact_head", ""),
@@ -173,12 +203,15 @@ def remote_validation_commands(
             ),
             (
                 "remote_reclaim_before_test_all",
-                "bash scripts/remove_cargo_target_if_idle.sh "
-                f"{shlex.quote(target)} && {prepare_target}",
+                conditional_reclaim,
             ),
             (
                 "remote_test_all",
-                leased(f"{target_env} CARGO_BUILD_JOBS=1 just test-all"),
+                leased(f"{target_env} just test-all"),
+            ),
+            (
+                "remote_mp001_parity",
+                leased(f"{target_env} bash scripts/check_mp001_split_parity.sh --verify"),
             ),
             ("remote_clean_after", 'test -z "$(git status --porcelain=v1 --untracked-files=all)"'),
         ]
@@ -191,10 +224,11 @@ def validated_remote_target(remote_target: str) -> str:
     generated_roots = (
         PurePosixPath("/home/johannes/.cache/codex-targets"),
         PurePosixPath("/tmp"),
+        PurePosixPath("/mnt/HC_Volume_107089260/builder-storage/cargo-targets"),
     )
     if (
         not path.is_absolute()
-        or ".." in path.parts
+        or any(part in (".", "..") for part in remote_target.split("/"))
         or not any(path != root and path.is_relative_to(root) for root in generated_roots)
     ):
         raise ValueError(f"remote target is not a safe generated-output path: {remote_target}")
@@ -380,14 +414,22 @@ def prepare(args: Any) -> int:
         'test -z "$(git status --porcelain=v1 --untracked-files=all)"'
     )
     remote_commands = remote_validation_commands(
-        vscode_changed=vscode_changed, remote_target=args.remote_target
+        vscode_changed=vscode_changed, remote_target=args.remote_target,
+        pinned_environment=(
+            getattr(args, "remote_tool_path", None) is not None
+            or getattr(args, "remote_cargo_home", None) is not None
+        ),
     )
     remote_commands[0] = ("remote_exact_head", remote_head_check)
     for command_id, command in remote_commands:
         records.append(
             command_record(
                 command_id,
-                remote_command(args.remote_host, args.remote_worktree, command),
+                remote_command(
+                    args.remote_host, args.remote_worktree, command,
+                    tool_path=getattr(args, "remote_tool_path", None),
+                    cargo_home=getattr(args, "remote_cargo_home", None),
+                ),
                 cwd=repo,
                 scope=args.remote_host,
                 log_dir=log_dir,

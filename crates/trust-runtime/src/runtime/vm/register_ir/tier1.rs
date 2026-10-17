@@ -7,10 +7,6 @@ mod state;
 pub(super) use self::compile::compile_tier1_block;
 pub(super) use self::execute::execute_tier1_compiled_block;
 pub(in crate::runtime) use self::state::RegisterTier1SpecializedExecutorState;
-#[cfg(test)]
-pub(super) use self::state::{
-    parse_env_bool as parse_tier1_env_bool, parse_env_usize as parse_tier1_env_usize,
-};
 pub(super) use self::state::{Tier1BlockKey, Tier1CompiledBlock, Tier1CompiledInstr};
 
 #[allow(clippy::too_many_arguments)]
@@ -22,7 +18,6 @@ pub(super) fn maybe_execute_tier1_block(
     frames: &mut FrameStack,
     registers: &mut [Value],
     native_call_stack: &mut OperandStack,
-    budget: &mut usize,
     depth_offset: u32,
 ) -> Result<Option<RegisterBlockExecutionOutcome>, RuntimeError> {
     if !runtime.vm_tier1_specialized_executor.enabled() {
@@ -75,7 +70,6 @@ pub(super) fn maybe_execute_tier1_block(
         registers,
         native_call_stack,
         compiled.as_ref(),
-        budget,
         depth_offset,
     )?;
     let Tier1BlockExecutionOutcome::Executed(outcome) = outcome;

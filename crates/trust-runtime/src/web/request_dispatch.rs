@@ -117,8 +117,11 @@ fn request_uses_body_lane(
 }
 
 fn try_acquire(permits: &AtomicUsize) -> bool {
+    // `Atomic::fetch_update` is renamed to `try_update` in newer std
+    // releases; the MSRV (1.95) only has the old name.
+    #[allow(deprecated)]
     permits
-        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |available| {
+        .try_update(Ordering::AcqRel, Ordering::Acquire, |available| {
             available.checked_sub(1)
         })
         .is_ok()

@@ -197,20 +197,13 @@ pub(in crate::runtime::vm::register_ir) fn compute_block_entry_stack_depths(
             }
         }
 
-        if !terminated {
-            if let Some(next_start_pc) = leaders.get(block_index + 1).copied() {
-                let next_index = *start_to_index.get(&next_start_pc).ok_or_else(|| {
-                    invalid_bytecode(format!(
-                        "register-ir fallthrough target {next_start_pc} is not a block leader",
-                    ))
-                })?;
-                propagate_block_entry_stack_depth(
-                    &mut entry_depths,
-                    next_index,
-                    depth,
-                    &mut worklist,
-                )?;
-            }
+        if !terminated && let Some(next_start_pc) = leaders.get(block_index + 1).copied() {
+            let next_index = *start_to_index.get(&next_start_pc).ok_or_else(|| {
+                invalid_bytecode(format!(
+                    "register-ir fallthrough target {next_start_pc} is not a block leader",
+                ))
+            })?;
+            propagate_block_entry_stack_depth(&mut entry_depths, next_index, depth, &mut worklist)?;
         }
     }
 
@@ -231,10 +224,10 @@ pub(in crate::runtime::vm::register_ir) fn decode_pou(
     let mut decoded = Vec::new();
     let mut pc = code_start;
     while pc < code_end {
-        let opcode = module.code.get(pc).copied().ok_or_else(|| {
+        let opcode = module.code().get(pc).copied().ok_or_else(|| {
             invalid_bytecode("register-ir decode instruction fetch out of bounds")
         })?;
-        let operand_len = opcode_operand_len_for_lowering(opcode).ok_or_else(|| {
+        let operand_len = opcode_operand_len(opcode).ok_or_else(|| {
             invalid_bytecode(format!("register-ir decode invalid opcode 0x{opcode:02X}"))
         })?;
         let next_pc = pc + 1 + operand_len;
@@ -249,7 +242,7 @@ pub(in crate::runtime::vm::register_ir) fn decode_pou(
             )));
         }
         let mut operands = [0_u8; MAX_INLINE_OPERAND_BYTES];
-        operands[..operand_len].copy_from_slice(&module.code[(pc + 1)..next_pc]);
+        operands[..operand_len].copy_from_slice(&module.code()[(pc + 1)..next_pc]);
         decoded.push(DecodedInstr {
             pc,
             next_pc,
@@ -260,13 +253,6 @@ pub(in crate::runtime::vm::register_ir) fn decode_pou(
         pc = next_pc;
     }
     Ok(decoded)
-}
-
-fn opcode_operand_len_for_lowering(opcode: u8) -> Option<usize> {
-    opcode_operand_len(opcode).or(match opcode {
-        0x25 => Some(0),
-        _ => None,
-    })
 }
 
 pub(in crate::runtime::vm::register_ir) fn collect_block_leaders(

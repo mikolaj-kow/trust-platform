@@ -97,8 +97,19 @@ pub(in crate::harness) fn lower_expr_with_context(
                     other => other,
                 };
             }
-            let mut left = lower_expr_with_context(&exprs[0], ctx, operand_context)?;
-            let mut right = lower_expr_with_context(&exprs[1], ctx, operand_context)?;
+            // Duration scaling has heterogeneous operands: the result context
+            // must not coerce its numeric factor into TIME/LTIME. The registry
+            // resolves duration aliases; each child keeps its inferred width.
+            let (left_context, right_context) = if matches!(op, BinaryOp::Mul | BinaryOp::Div)
+                && operand_context
+                    .is_some_and(|ty| ctx.registry.is_assignable(TypeId::ANY_DURATION, ty))
+            {
+                (left_type, right_type)
+            } else {
+                (operand_context, operand_context)
+            };
+            let mut left = lower_expr_with_context(&exprs[0], ctx, left_context)?;
+            let mut right = lower_expr_with_context(&exprs[1], ctx, right_context)?;
             // Let a bare enum variant name on one side resolve against the
             // other side's enum type. Mirrors the v0.18.4 CASE-label fix
             // (commit 8d7f069) for symmetric binary operands such as
@@ -341,10 +352,10 @@ fn lower_sizeof_operand_type(
 ) -> Result<TypeId, CompileError> {
     // Namespace-qualified type operands like Demo.Packet parse as FieldExpr,
     // so prefer the type path before semantic value typing for that shape.
-    if node.kind() == SyntaxKind::FieldExpr {
-        if let Some(type_id) = lower_sizeof_named_type_operand(node, ctx)? {
-            return Ok(type_id);
-        }
+    if node.kind() == SyntaxKind::FieldExpr
+        && let Some(type_id) = lower_sizeof_named_type_operand(node, ctx)?
+    {
+        return Ok(type_id);
     }
     if let Some(type_id) = lower_sizeof_value_operand_type(node, ctx)? {
         return Ok(type_id);
@@ -449,7 +460,11 @@ fn offset_for_type_lookup(node: &SyntaxNode) -> u32 {
     let range = node.text_range();
     let end = u32::from(range.end());
     let start = u32::from(range.start());
-    if end > start { end - 1 } else { start }
+    if end > start {
+        end - 1
+    } else {
+        start
+    }
 }
 
 pub(in crate::harness) fn lower_expression_type(

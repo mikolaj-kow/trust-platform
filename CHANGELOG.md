@@ -6,6 +6,174 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+Target release: `v0.24.74`
+
+### Added
+
+- Resolve textual action call sites in the IDE (CODESYS vendor extension):
+  bare `action_name()` calls and `ProgramName.action_name()` now resolve to
+  the action symbol, so go-to-definition, hover, find-references, and rename
+  include action call sites instead of silently dropping (or corrupting)
+  them.
+- Diagnose a DUT `EXTENDS` clause whose base names no declared type
+  (`cannot resolve type '<base>'`, `E102`); the derived struct was
+  previously accepted silently and inherited from nothing.
+- Tolerate identical duplicate declarations in PLCopen `globalVars` lists
+  (e!COCKPIT MixedAttrsVarList parity): repeats are dropped with a
+  `PLCO605` info instead of skipping the whole list; conflicting
+  redefinitions still reject the list (`PLCO604`).
+- Import CODESYS `pouType="action"` PLCopen POUs: `Parent.Action` names
+  merge into the parent POU as textual `ACTION` blocks (`PLCO219` info);
+  body-less actions skip with `PLCO204`, and actions without parent linkage
+  keep the `PLCO203` fail-closed skip. Real e!COCKPIT exports are covered
+  too: textual actions nested structurally under the parent POU
+  (`<pou><actions><action name="Plain">`) merge the same way, where they
+  were previously dropped silently.
+- Import e!COCKPIT methods attached to PROGRAM POUs (previously only
+  function-block methods were kept): the method body merges into the
+  program mirror so self-calls like `StateToBool(...)` resolve.
+- Resolve CODESYS qualified enum member access (`EnumType.Member`, optionally
+  namespace-qualified) in variable initializers and expressions, instead of
+  reporting undefined-identifier or type-as-value errors.
+- Accept an empty right-hand side on named call bindings (`input :=` and
+  `output =>` with no target, at a comma or the closing parenthesis) as a
+  CODESYS vendor extension: the parameter is skipped instead of erroring.
+  `?=` still requires a target.
+- Extend CODESYS qualified enum member access (`EnumType.Member`) to CASE
+  labels (with numeric value tracking for coverage checks) and to enums
+  declared inside namespaces, closing the remaining E202 residual (43
+  measured s4 sites: 32 CASE labels, 4 namespace-scoped member reads).
+- Default function-block members to Public (classic IEC instance access):
+  plain `VAR`, `VAR_STAT`, methods, and properties are reachable through
+  the instance name (`fbInst.member`) from other POUs; restriction is
+  opt-in with `VAR_PROTECTED`/`VAR_PRIVATE`, and `VAR_IN_OUT`/`VAR_TEMP`/
+  `VAR_EXTERNAL` members keep the restricted default. Assignment through
+  an input-parameter slot (`fbInput.field := value`) stays rejected.
+- Attribute project constant-eval failures to the file that owns the
+  constant: a library/stub file's failed constant no longer surfaces as
+  a diagnostic under every other analyzed file's path (agent-serve
+  reported stub spans under workspace src/ paths).
+- Read the canonical e!COCKPIT v3.9.2 array initializer form
+  (`<initialValue><arrayValue><value><simpleValue …/>`) in GVL imports,
+  flattening it to the ST bracket list — the boot tables previously
+  vanished from the mirror.
+- Namespace-wrap every imported `globalVars` list (not only
+  `qualified_only` ones) so qualified access resolves; unqualified
+  access to a namespaced list requires a `USING` directive (documented
+  in PLCOPEN_DECISIONS).
+- Make function-block and program `VAR_INPUT` members writable (CODESYS
+  parity): the owning body and external POUs may assign them between calls.
+  Function/method parameters stay call-local, and pointer/reference input
+  slots keep the read-only-slot policy.
+- Accept a dangling output binding `out =>` (no target) in call argument
+  lists as a CODESYS vendor extension: the output is explicitly discarded
+  and the call stays valid; a dangling target after `:=` remains an error.
+  Named `:=` binding to `VAR_IN_OUT` pins was already supported and stays
+  locked by the acceptance contracts.
+- Accept enum-typed array subscripts (enum values and enum-typed variables)
+  as a CODESYS vendor extension, alongside the IEC ANY_INT subscripts.
+- Accept `RETAIN PERSISTENT` in state-owning variable sections as a
+  WAGO/CODESYS vendor extension (persistent implies retention);
+  `NON_RETAIN` combinations and duplicate qualifiers remain errors.
+- Make textual actions callable by name (CODESYS vendor extension): bare
+  `action_name()` inside the owning POU, `POU.action_name()`, and
+  `instance.action_name()`; calls take no arguments and produce no value,
+  and a same-named variable still shadows the action outside call
+  position.
+- Support CODESYS program-singleton access (vendor extension):
+  `Program.member` reads/writes across programs (including function-block
+  instances), and `ProgramName();` invokes another program body; a bare
+  program name in value position remains rejected.
+- Support CODESYS-style DUT inheritance (`TYPE Derived EXTENDS Base` on
+  STRUCT types, vendor extension): inherited field access, derived-to-base
+  assignment compatibility, duplicate-field and cycle diagnostics, and
+  cross-file base resolution.
+- Auto-dereference `REFERENCE TO` values (CODESYS parity): member access,
+  indexing, arithmetic, and assignment copy through a reference without `^`;
+  assignment between two references still rebinds. `POINTER TO` keeps
+  requiring explicit `^` and stays rejected in arithmetic.
+- Add the CODESYS-style `REF=` reference-rebinding statement as a vendor
+  extension: `ref REF= variable` rebinds to the variable's storage,
+  `ref1 REF= ref2` rebinds to a compatible reference target, and
+  `ref REF= NULL` (or `0`) clears the reference; value and pointer targets
+  are rejected.
+- Accept the CODESYS-style `REFERENCE TO T` spelling as a vendor-style alias
+  for the IEC `REF_TO T` reference type, with the same declaration rules and
+  semantics.
+- Add the NUCLEO-F401RE reference composition for the shared runtime, with bounded memory, separately installed STBC artifacts, and remote GPIO/watchdog evidence tooling. The full-function F401 bring-up passes saved-artifact traces, numeric checks, GPIO safe outputs, depth-four calls and independent-watchdog reset; production qualification remains separate.
+
+- Add explicit STBC 2.0 authoring and portable byte-level validation for declared
+  storage, construction roots, compiled initializer recipes and access bindings.
+  Legacy 1.1 remains the default producer. The source-free core now prepares and
+  executes 2.0 through the shared bytecode dispatcher, including compiled initializers,
+  typed storage, timers, process images and nominal-deadline task scheduling.
+  Warm restart remaps retained objects transactionally; failed initialization or
+  output copy-back does not publish partial replacement state or output destinations.
+  Hardware execution and timing qualification remain separate bring-up work.
+  Prepared declaration indexes and destination-only output journals keep execution
+  costs independent of unrelated application storage. Hosted reference checks borrow
+  paths without allocation. Runtime protection, profile admission and decoder-limit
+  failures now have distinct stable diagnostic codes.
+  Generic CTU/CTD/CTUD construction preserves their unbound integer state until
+  the native call selects its concrete integer width.
+  Initializer admission restricts writes to proven staging storage; 2.0 authoring
+  shares equivalent default recipes, omits unused standard block templates and
+  rejects unknown configuration/access path prefixes.
+  The opt-in 2.0 producer supports staged member overrides on function-static FB
+  instances at initial construction and after restart; legacy 1.x acceptance is unchanged.
+
+- Persist canonical OpenOT event, loss, and placeholder documents outside the
+  PLC scan to a TOML-selected SQLite, PostgreSQL, TimescaleDB, MySQL/MariaDB,
+  SQL Server, or InfluxDB 3 backend, with atomic durable checkpoints,
+  idempotent replay, TLS/secret boundaries, InfluxDB outage spooling, runtime
+  status, complete examples, and real-vendor conformance coverage.
+- Expose typed logging objects with descriptive names such as
+  `logged_values`, `alarm_history`, `message_log`, `state_history`, and
+  `audit_log`; normal reports no longer require OpenOT field arrays or JSON
+  paths, while canonical JSON remains internal recovery authority. Every
+  backend and the InfluxDB spool initialize the same first schema generation,
+  1, directly. Because database persistence has not previously shipped,
+  incompatible pre-release development schemas fail closed without migration,
+  backfill, reconstruction, or automatic repair. Runtime status reports this
+  shared contract as `schema_generation`, not a backend-specific version.
+- Support MQTT tag mappings that bind fully qualified scalar program variables
+  directly to broker topics with explicit PLC-relative `read` and `write`
+  directions.
+
+### Changed
+
+- Modernize the supported build baseline to Rust 1.99 (edition 2024, resolver 3)
+  and Node 24.21.0; refresh dependency families while retaining compatible LSP
+  and editor API pairs. Software and full-function F401 fixture qualification pass;
+  production and ESP32 hardware qualification remain separate.
+- Test configuration no longer mutates process-wide environment variables;
+  verification, register executor, OPC UA and persistence tests supply values
+  directly through their owning configuration boundaries.
+
+- Use compact live activation storage and portable instance storage without changing
+  PLC identities or functions. Portable field lookup reuses existing hash indexes;
+  output journals keep ordered destination-only rollback. Charge batch retirement
+  while preserving cleanup on exhausted execution budgets. Frame storage includes
+  initializer staging in addition to admitted call depth. F401 fixture bring-up is verified; production storage and timing qualification remain separate.
+
+- Reduce shared-runtime code duplication in numeric conversions, assertion comparison,
+  bounded sorting and engine identity maps while preserving every PLC function and
+  diagnostic. F401 placement uses immutable sector-0 space with separate load-region
+  checks and a 16 KiB upper-region margin requirement; F401 fixture measurements meet the flash and stack margins; production qualification remains separate.
+
+- Reduce portable preparation overhead with shared static standard-library metadata,
+  indexed preparation tables and shared bounded sorting. Byte-input preparation
+  avoids serialization, and embedded CRC uses a compact implementation with identical
+  results. Portable preparation retains structured diagnostic context without eager
+  formatting; hosted messages and fault codes remain. Default-library lookup returns
+  a borrowed metadata view. F401 code uses the 448 KiB L2 region; two reserved checkpoint sectors do
+  not yet provide persistence. All IEC functions and admission checks remain.
+
+- Share STBC 1.x decoding, validation, metadata extraction and serialization with the portable runtime core, preserving hosted bytecode APIs.
+- Route core exponentiation, duration truncation and hosted numerical functions
+  through libm 0.2.16 while retaining their promotion, narrowing and fault policies.
+  Add isolated F401/C6 core build gates and explicit portable ordered-map hashing;
+  this establishes library portability, not qualified board support.
 - Specify runtime clock dispatch name/error identity and deterministic LSP
   diagnostic-override collision precedence, including canonical-key priority
   and alias-only lexical ordering.
@@ -48,30 +216,87 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
   fail-closed import diagnostics, migration and CODESYS metadata, reviewed
   vendor shims, and Allen-Bradley/Siemens adapter artifact contracts.
 
-Target release: `v0.24.69`
-
-### Added
-
-- Persist canonical OpenOT event, loss, and placeholder documents outside the
-  PLC scan to a TOML-selected SQLite, PostgreSQL, TimescaleDB, MySQL/MariaDB,
-  SQL Server, or InfluxDB 3 backend, with atomic durable checkpoints,
-  idempotent replay, TLS/secret boundaries, InfluxDB outage spooling, runtime
-  status, complete examples, and real-vendor conformance coverage.
-- Expose typed logging objects with descriptive names such as
-  `logged_values`, `alarm_history`, `message_log`, `state_history`, and
-  `audit_log`; normal reports no longer require OpenOT field arrays or JSON
-  paths, while canonical JSON remains internal recovery authority. Every
-  backend and the InfluxDB spool initialize the same first schema generation,
-  1, directly. Because database persistence has not previously shipped,
-  incompatible pre-release development schemas fail closed without migration,
-  backfill, reconstruction, or automatic repair. Runtime status reports this
-  shared contract as `schema_generation`, not a backend-specific version.
-- Support MQTT tag mappings that bind fully qualified scalar program variables
-  directly to broker topics with explicit PLC-relative `read` and `write`
-  directions.
-
 ### Fixed
 
+- Isolate the real OpenOT PLC scan-overhead regression from concurrent functional
+  tests and compare paired scans with alternating order, preserving the existing
+  threshold and checking that the real persistence worker commits and drains.
+
+- Route required real-database qualification through the Rust generated-environment decoder and clear inherited database settings before launching the gate, so stale parent values cannot satisfy missing generated inputs.
+
+- Reject source-freeze manifests inside the source checkout, including symlink aliases, and preserve existing manifests rather than overwriting them. Source identity also checks working-tree file kinds, link targets and Unix executable bits; older byte-only snapshots remain historical evidence.
+
+- Bound rendered-test browser startup and lifetime with Rust-owned subprocess cleanup and visible browser/version diagnostics; install selected CI tools and locked frontend prerequisites before their gates.
+
+- Make PostgreSQL and TimescaleDB release-runner TLS mounts accessible to the
+  service UID under restrictive host umasks, while keeping server keys private.
+- Preserve source-free restart initialization of direct input, output and marker
+  image addresses. Warm and cold restart carry previous images into staging before
+  ordered configuration actions, keeping unconfigured values and transactional
+  failure behavior.
+- Support system Bash 3.2 in the shared dependency-audit wrapper, including empty
+  exception lists, and preserve native path separators in firmware remapping.
+
+- Confirm managed fleet shutdown across control-connection teardown without
+  mistaking interrupted status probes for a failed shutdown or a confirmed stop.
+  Preserve authentication/protocol errors and retain the PID until stop is confirmed.
+
+- Publish the runtime portability specification in the public reference and preserve
+  warm release-build artifacts when the target filesystem already meets the existing
+  80 GiB capacity requirement.
+
+- Keep the unsupported Git-marker regression executable with long temporary
+  directory paths on Unix hosts.
+
+- Bind release validation capacity checks to the selected generated-target filesystem;
+  support the mounted builder volume with the same leases, ownership checks and
+  80 GiB minimum, avoiding root-disk exhaustion during cold workspace tests.
+
+- Remove deleted project sources from the language server consistently across
+  directory notifications, reindexing and concurrent document close/index operations,
+  preventing stale duplicate declarations when creating a new project. Retain
+  registered file identity after text eviction so deletion and rename also work
+  through filesystem aliases on macOS and Windows.
+
+- Protect I/O credentials in IDE, configuration-text and remote proxy reads;
+  preserve stored secrets (including a literal `<redacted>`) on unchanged saves,
+  and prevent generic IDE symlink/rename aliases from bypassing redaction.
+  Retained MQTT passwords are bound to their broker and authentication context;
+  changing that context requires explicit replacement credentials.
+- Use the Rust 1.95-compatible atomic update API without deprecated calls on
+  current stable Rust, and update concurrently to remove the shell-quote
+  command-injection advisory.
+- Preserve numeric operand types when compiling TIME/LTIME scaling, including
+  duration aliases and nested scalar expressions.
+- Execute compiled PLC call chains through explicit shared VM continuations to bound native dispatcher nesting; stop F401 bring-up when measured stack headroom is insufficient.
+
+- Keep deadline expiry latched through portable execution cleanup and build bulk input rollback snapshots without quadratic insertion work; preserve ordered writes and alias rollback.
+
+- Preserve function-block instance ownership when a body contains a NULL literal, so instance-field accesses bind to the invoked instance.
+
+- Bound bytecode validation scratch storage and work across instructions and metadata,
+  retaining stack states only at control-flow block entries. Reject section payloads
+  that overlap container headers/tables, misaligned headers, raw record discriminant
+  mismatches and encoder count/extent overflow before preparing executable state.
+
+- Reject overflowing byte-reader lengths and section/POU extents and relative jump targets before slicing or advancing the reader.
+
+- Preserve nominal periodic-task deadlines when the task interval is not a
+  multiple of the resource cycle. For exact 10 ms samples, a 25 ms task now
+  activates at 30, 50, 80 and 100 ms instead of every 30 ms; missed activations
+  remain dropped and counted. These describe the logical scheduling rule,
+  not measured hosted wake timing.
+
+- Security: update `rustls` to 0.23.45 (RUSTSEC-2026-0285, TLS 1.3 handshake messages accepted
+  across encryption levels) and `salsa` to 0.28.5 (RUSTSEC-2026-0308, use-after-free in interned
+  values and cached query results). The two queries whose results salsa now returns by reference
+  are read by value, unchanged in behaviour. The VS Code extension's `brace-expansion` (2.1.7,
+  5.0.12) and `js-yaml` (4.3.2) move past two high-severity CPU denial-of-service advisories.
+- Security: `GET /api/io/config` answered without the web authentication in the runtime's own
+  web server, and every I/O configuration read returned driver credentials such as an MQTT
+  password. The read now needs the Viewer role in every server mode, and passwords, tokens,
+  secrets and private keys come back as `<redacted>`; saving a configuration as it was read
+  keeps the stored credential (specification 11, §6.9.7).
 - Resolve symbolic MQTT tag mappings when a project is launched in the VS Code
   simulator, so mapped outputs connect and publish instead of leaving the
   debugger with an empty process image.
@@ -758,6 +983,61 @@ Target release: `v0.24.69`
 
 ### Added
 
+- Resolve textual action call sites in the IDE (CODESYS vendor extension):
+  bare `action_name()` calls and `ProgramName.action_name()` now resolve to
+  the action symbol, so go-to-definition, hover, find-references, and rename
+  include action call sites instead of silently dropping (or corrupting)
+  them.
+- Diagnose a DUT `EXTENDS` clause whose base names no declared type
+  (`cannot resolve type '<base>'`, `E102`); the derived struct was
+  previously accepted silently and inherited from nothing.
+- Tolerate identical duplicate declarations in PLCopen `globalVars` lists
+  (e!COCKPIT MixedAttrsVarList parity): repeats are dropped with a
+  `PLCO605` info instead of skipping the whole list; conflicting
+  redefinitions still reject the list (`PLCO604`).
+- Import CODESYS `pouType="action"` PLCopen POUs: `Parent.Action` names
+  merge into the parent POU as textual `ACTION` blocks (`PLCO219` info);
+  body-less actions skip with `PLCO204`, and actions without parent linkage
+  keep the `PLCO203` fail-closed skip.
+- Make function-block and program `VAR_INPUT` members writable (CODESYS
+  parity): the owning body and external POUs may assign them between calls.
+  Function/method parameters stay call-local, and pointer/reference input
+  slots keep the read-only-slot policy.
+- Accept a dangling output binding `out =>` (no target) in call argument
+  lists as a CODESYS vendor extension: the output is explicitly discarded
+  and the call stays valid; a dangling target after `:=` remains an error.
+  Named `:=` binding to `VAR_IN_OUT` pins was already supported and stays
+  locked by the acceptance contracts.
+- Accept enum-typed array subscripts (enum values and enum-typed variables)
+  as a CODESYS vendor extension, alongside the IEC ANY_INT subscripts.
+- Accept `RETAIN PERSISTENT` in state-owning variable sections as a
+  WAGO/CODESYS vendor extension (persistent implies retention);
+  `NON_RETAIN` combinations and duplicate qualifiers remain errors.
+- Make textual actions callable by name (CODESYS vendor extension): bare
+  `action_name()` inside the owning POU, `POU.action_name()`, and
+  `instance.action_name()`; calls take no arguments and produce no value,
+  and a same-named variable still shadows the action outside call
+  position.
+- Support CODESYS program-singleton access (vendor extension):
+  `Program.member` reads/writes across programs (including function-block
+  instances), and `ProgramName();` invokes another program body; a bare
+  program name in value position remains rejected.
+- Support CODESYS-style DUT inheritance (`TYPE Derived EXTENDS Base` on
+  STRUCT types, vendor extension): inherited field access, derived-to-base
+  assignment compatibility, duplicate-field and cycle diagnostics, and
+  cross-file base resolution.
+- Auto-dereference `REFERENCE TO` values (CODESYS parity): member access,
+  indexing, arithmetic, and assignment copy through a reference without `^`;
+  assignment between two references still rebinds. `POINTER TO` keeps
+  requiring explicit `^` and stays rejected in arithmetic.
+- Add the CODESYS-style `REF=` reference-rebinding statement as a vendor
+  extension: `ref REF= variable` rebinds to the variable's storage,
+  `ref1 REF= ref2` rebinds to a compatible reference target, and
+  `ref REF= NULL` (or `0`) clears the reference; value and pointer targets
+  are rejected.
+- Accept the CODESYS-style `REFERENCE TO T` spelling as a vendor-style alias
+  for the IEC `REF_TO T` reference type, with the same declaration rules and
+  semantics.
 - vscode/trust-runtime: Devices & Connections can select any valid ADS server
   port before browsing symbols, defaults to PLC port `851`, preserves non-851
   ports through browse/import/`ads.toml`, and distinguishes an unavailable ADS
@@ -1003,6 +1283,8 @@ Target release: `v0.24.69`
   digital-twin or trust-twin runtime path.
 
 ### Changed
+
+- Let release validation honor the builder's configured Cargo job limit instead of forcing a single concurrent build job.
 
 - vscode/docs: documented the shipped product contract for the truST sidebar,
   Live Values, Devices & Connections, examples, libraries, HMI, and visual
@@ -1931,6 +2213,61 @@ Target release: `v0.24.69`
 
 ### Added
 
+- Resolve textual action call sites in the IDE (CODESYS vendor extension):
+  bare `action_name()` calls and `ProgramName.action_name()` now resolve to
+  the action symbol, so go-to-definition, hover, find-references, and rename
+  include action call sites instead of silently dropping (or corrupting)
+  them.
+- Diagnose a DUT `EXTENDS` clause whose base names no declared type
+  (`cannot resolve type '<base>'`, `E102`); the derived struct was
+  previously accepted silently and inherited from nothing.
+- Tolerate identical duplicate declarations in PLCopen `globalVars` lists
+  (e!COCKPIT MixedAttrsVarList parity): repeats are dropped with a
+  `PLCO605` info instead of skipping the whole list; conflicting
+  redefinitions still reject the list (`PLCO604`).
+- Import CODESYS `pouType="action"` PLCopen POUs: `Parent.Action` names
+  merge into the parent POU as textual `ACTION` blocks (`PLCO219` info);
+  body-less actions skip with `PLCO204`, and actions without parent linkage
+  keep the `PLCO203` fail-closed skip.
+- Make function-block and program `VAR_INPUT` members writable (CODESYS
+  parity): the owning body and external POUs may assign them between calls.
+  Function/method parameters stay call-local, and pointer/reference input
+  slots keep the read-only-slot policy.
+- Accept a dangling output binding `out =>` (no target) in call argument
+  lists as a CODESYS vendor extension: the output is explicitly discarded
+  and the call stays valid; a dangling target after `:=` remains an error.
+  Named `:=` binding to `VAR_IN_OUT` pins was already supported and stays
+  locked by the acceptance contracts.
+- Accept enum-typed array subscripts (enum values and enum-typed variables)
+  as a CODESYS vendor extension, alongside the IEC ANY_INT subscripts.
+- Accept `RETAIN PERSISTENT` in state-owning variable sections as a
+  WAGO/CODESYS vendor extension (persistent implies retention);
+  `NON_RETAIN` combinations and duplicate qualifiers remain errors.
+- Make textual actions callable by name (CODESYS vendor extension): bare
+  `action_name()` inside the owning POU, `POU.action_name()`, and
+  `instance.action_name()`; calls take no arguments and produce no value,
+  and a same-named variable still shadows the action outside call
+  position.
+- Support CODESYS program-singleton access (vendor extension):
+  `Program.member` reads/writes across programs (including function-block
+  instances), and `ProgramName();` invokes another program body; a bare
+  program name in value position remains rejected.
+- Support CODESYS-style DUT inheritance (`TYPE Derived EXTENDS Base` on
+  STRUCT types, vendor extension): inherited field access, derived-to-base
+  assignment compatibility, duplicate-field and cycle diagnostics, and
+  cross-file base resolution.
+- Auto-dereference `REFERENCE TO` values (CODESYS parity): member access,
+  indexing, arithmetic, and assignment copy through a reference without `^`;
+  assignment between two references still rebinds. `POINTER TO` keeps
+  requiring explicit `^` and stays rejected in arithmetic.
+- Add the CODESYS-style `REF=` reference-rebinding statement as a vendor
+  extension: `ref REF= variable` rebinds to the variable's storage,
+  `ref1 REF= ref2` rebinds to a compatible reference target, and
+  `ref REF= NULL` (or `0`) clears the reference; value and pointer targets
+  are rejected.
+- Accept the CODESYS-style `REFERENCE TO T` spelling as a vendor-style alias
+  for the IEC `REF_TO T` reference type, with the same declaration rules and
+  semantics.
 - Structured Text initializers now support named aggregate defaults for
   `STRUCT`/`UNION` values at VAR, TYPE, and member-default sites, route those
   defaults through a runtime initializer service, validate unknown/duplicate
@@ -2320,6 +2657,61 @@ Target release: `v0.24.69`
 
 ### Added
 
+- Resolve textual action call sites in the IDE (CODESYS vendor extension):
+  bare `action_name()` calls and `ProgramName.action_name()` now resolve to
+  the action symbol, so go-to-definition, hover, find-references, and rename
+  include action call sites instead of silently dropping (or corrupting)
+  them.
+- Diagnose a DUT `EXTENDS` clause whose base names no declared type
+  (`cannot resolve type '<base>'`, `E102`); the derived struct was
+  previously accepted silently and inherited from nothing.
+- Tolerate identical duplicate declarations in PLCopen `globalVars` lists
+  (e!COCKPIT MixedAttrsVarList parity): repeats are dropped with a
+  `PLCO605` info instead of skipping the whole list; conflicting
+  redefinitions still reject the list (`PLCO604`).
+- Import CODESYS `pouType="action"` PLCopen POUs: `Parent.Action` names
+  merge into the parent POU as textual `ACTION` blocks (`PLCO219` info);
+  body-less actions skip with `PLCO204`, and actions without parent linkage
+  keep the `PLCO203` fail-closed skip.
+- Make function-block and program `VAR_INPUT` members writable (CODESYS
+  parity): the owning body and external POUs may assign them between calls.
+  Function/method parameters stay call-local, and pointer/reference input
+  slots keep the read-only-slot policy.
+- Accept a dangling output binding `out =>` (no target) in call argument
+  lists as a CODESYS vendor extension: the output is explicitly discarded
+  and the call stays valid; a dangling target after `:=` remains an error.
+  Named `:=` binding to `VAR_IN_OUT` pins was already supported and stays
+  locked by the acceptance contracts.
+- Accept enum-typed array subscripts (enum values and enum-typed variables)
+  as a CODESYS vendor extension, alongside the IEC ANY_INT subscripts.
+- Accept `RETAIN PERSISTENT` in state-owning variable sections as a
+  WAGO/CODESYS vendor extension (persistent implies retention);
+  `NON_RETAIN` combinations and duplicate qualifiers remain errors.
+- Make textual actions callable by name (CODESYS vendor extension): bare
+  `action_name()` inside the owning POU, `POU.action_name()`, and
+  `instance.action_name()`; calls take no arguments and produce no value,
+  and a same-named variable still shadows the action outside call
+  position.
+- Support CODESYS program-singleton access (vendor extension):
+  `Program.member` reads/writes across programs (including function-block
+  instances), and `ProgramName();` invokes another program body; a bare
+  program name in value position remains rejected.
+- Support CODESYS-style DUT inheritance (`TYPE Derived EXTENDS Base` on
+  STRUCT types, vendor extension): inherited field access, derived-to-base
+  assignment compatibility, duplicate-field and cycle diagnostics, and
+  cross-file base resolution.
+- Auto-dereference `REFERENCE TO` values (CODESYS parity): member access,
+  indexing, arithmetic, and assignment copy through a reference without `^`;
+  assignment between two references still rebinds. `POINTER TO` keeps
+  requiring explicit `^` and stays rejected in arithmetic.
+- Add the CODESYS-style `REF=` reference-rebinding statement as a vendor
+  extension: `ref REF= variable` rebinds to the variable's storage,
+  `ref1 REF= ref2` rebinds to a compatible reference target, and
+  `ref REF= NULL` (or `0`) clears the reference; value and pointer targets
+  are rejected.
+- Accept the CODESYS-style `REFERENCE TO T` spelling as a vendor-style alias
+  for the IEC `REF_TO T` reference type, with the same declaration rules and
+  semantics.
 - `libraries/oscat` now ships the full manual-aligned OSCAT chapter set
   (`03_data_types` through `26_list_processing`) as the primary OSCAT package,
   including the OSCAT_BUILDING Chapter 23 control/environmental surface, a
@@ -2441,6 +2833,61 @@ Target release: `v0.24.69`
 
 ### Added
 
+- Resolve textual action call sites in the IDE (CODESYS vendor extension):
+  bare `action_name()` calls and `ProgramName.action_name()` now resolve to
+  the action symbol, so go-to-definition, hover, find-references, and rename
+  include action call sites instead of silently dropping (or corrupting)
+  them.
+- Diagnose a DUT `EXTENDS` clause whose base names no declared type
+  (`cannot resolve type '<base>'`, `E102`); the derived struct was
+  previously accepted silently and inherited from nothing.
+- Tolerate identical duplicate declarations in PLCopen `globalVars` lists
+  (e!COCKPIT MixedAttrsVarList parity): repeats are dropped with a
+  `PLCO605` info instead of skipping the whole list; conflicting
+  redefinitions still reject the list (`PLCO604`).
+- Import CODESYS `pouType="action"` PLCopen POUs: `Parent.Action` names
+  merge into the parent POU as textual `ACTION` blocks (`PLCO219` info);
+  body-less actions skip with `PLCO204`, and actions without parent linkage
+  keep the `PLCO203` fail-closed skip.
+- Make function-block and program `VAR_INPUT` members writable (CODESYS
+  parity): the owning body and external POUs may assign them between calls.
+  Function/method parameters stay call-local, and pointer/reference input
+  slots keep the read-only-slot policy.
+- Accept a dangling output binding `out =>` (no target) in call argument
+  lists as a CODESYS vendor extension: the output is explicitly discarded
+  and the call stays valid; a dangling target after `:=` remains an error.
+  Named `:=` binding to `VAR_IN_OUT` pins was already supported and stays
+  locked by the acceptance contracts.
+- Accept enum-typed array subscripts (enum values and enum-typed variables)
+  as a CODESYS vendor extension, alongside the IEC ANY_INT subscripts.
+- Accept `RETAIN PERSISTENT` in state-owning variable sections as a
+  WAGO/CODESYS vendor extension (persistent implies retention);
+  `NON_RETAIN` combinations and duplicate qualifiers remain errors.
+- Make textual actions callable by name (CODESYS vendor extension): bare
+  `action_name()` inside the owning POU, `POU.action_name()`, and
+  `instance.action_name()`; calls take no arguments and produce no value,
+  and a same-named variable still shadows the action outside call
+  position.
+- Support CODESYS program-singleton access (vendor extension):
+  `Program.member` reads/writes across programs (including function-block
+  instances), and `ProgramName();` invokes another program body; a bare
+  program name in value position remains rejected.
+- Support CODESYS-style DUT inheritance (`TYPE Derived EXTENDS Base` on
+  STRUCT types, vendor extension): inherited field access, derived-to-base
+  assignment compatibility, duplicate-field and cycle diagnostics, and
+  cross-file base resolution.
+- Auto-dereference `REFERENCE TO` values (CODESYS parity): member access,
+  indexing, arithmetic, and assignment copy through a reference without `^`;
+  assignment between two references still rebinds. `POINTER TO` keeps
+  requiring explicit `^` and stays rejected in arithmetic.
+- Add the CODESYS-style `REF=` reference-rebinding statement as a vendor
+  extension: `ref REF= variable` rebinds to the variable's storage,
+  `ref1 REF= ref2` rebinds to a compatible reference target, and
+  `ref REF= NULL` (or `0`) clears the reference; value and pointer targets
+  are rejected.
+- Accept the CODESYS-style `REFERENCE TO T` spelling as a vendor-style alias
+  for the IEC `REF_TO T` reference type, with the same declaration rules and
+  semantics.
 - Shipped the first PLCopen Motion library profile in Structured Text: Part 1 single-axis classic core, Part 1 synchronization cam/gear subset, Part 4 coordinated-motion core subset, and Part 5 homing core subset, with a compliance matrix, user-facing guide, deferred-surface guards, and deterministic ST conformance fixtures.
 - truST now accepts namespaced vendor-style GVL declarations (`NAMESPACE ... VAR_GLOBAL ... END_NAMESPACE`) and resolves qualified access such as `GVL.shared` in both HIR and runtime execution.
 - truST now records vendor-parity global access explicitly: top-level GVLs, namespaced GVLs, and direct global access without mandatory `VAR_EXTERNAL` are documented and covered by regression tests.

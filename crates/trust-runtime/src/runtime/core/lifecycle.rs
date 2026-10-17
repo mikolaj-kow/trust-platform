@@ -55,6 +55,9 @@ impl Runtime {
             vm_local_init_plan_cache: super::vm::VmLocalInitPlanCacheState::default(),
             vm_register_lowering_cache: super::vm::RegisterLoweringCacheState::from_env(),
             vm_register_profile: super::vm::RegisterProfileState::default(),
+            vm_execution_budget: trust_runtime_core::vm::hosted::budget::ExecutionBudget::new(
+                trust_runtime_core::vm::VM_MAX_EXECUTED_INSTRUCTIONS,
+            ),
             vm_tier1_specialized_executor:
                 super::vm::RegisterTier1SpecializedExecutorState::from_env(),
         };
@@ -274,19 +277,19 @@ impl Runtime {
             debug.clear_runtime_mutations();
         }
         let mut reported = err.clone();
-        if decision.apply_safe_state {
-            if let Err(safe_state_err) = self.io.apply_safe_state() {
-                reported = error::RuntimeError::SafeStateFailed {
-                    root: smol_str::SmolStr::new(err.to_string()),
-                    error: smol_str::SmolStr::new(safe_state_err.to_string()),
-                };
-                if let Some(debug) = &self.debug {
-                    debug.push_runtime_event(crate::debug::RuntimeEvent::SafeStateFailed {
-                        root: err.to_string(),
-                        error: safe_state_err.to_string(),
-                        time: self.current_time,
-                    });
-                }
+        if decision.apply_safe_state
+            && let Err(safe_state_err) = self.io.apply_safe_state()
+        {
+            reported = error::RuntimeError::SafeStateFailed {
+                root: smol_str::SmolStr::new(err.to_string()),
+                error: smol_str::SmolStr::new(safe_state_err.to_string()),
+            };
+            if let Some(debug) = &self.debug {
+                debug.push_runtime_event(crate::debug::RuntimeEvent::SafeStateFailed {
+                    root: err.to_string(),
+                    error: safe_state_err.to_string(),
+                    time: self.current_time,
+                });
             }
         }
         self.faults.record(err.clone());

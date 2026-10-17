@@ -10,14 +10,17 @@ impl SymbolCollector<'_> {
         for (scope, name) in keys {
             if let Err(err) =
                 self.try_resolve_const_value_for_scope(name.as_str(), &scope, &mut guard)
-            {
-                if let Some(expr) = self
+                && let Some((origin, expr)) = self
                     .const_exprs
                     .get(&const_key(&scope, name.as_str()))
                     .cloned()
-                {
-                    self.report_const_eval_error(err, expr.text_range());
-                }
+                // A stub's failed constant must not surface under another
+                // file's path: report only in the owning file.
+                && self
+                    .const_origin_filter
+                    .is_none_or(|queried| queried == origin)
+            {
+                self.report_const_eval_error(err, expr.text_range());
             }
         }
     }
@@ -67,16 +70,14 @@ impl SymbolCollector<'_> {
                     let scope = Some(qualified_name_string(&parts[..parts.len() - 1]));
                     let resolved =
                         self.try_resolve_const_value_for_scope(name.as_str(), &scope, guard);
-                    if matches!(resolved, Err(ConstEvalError::UndefinedName(_))) {
-                        if let Some(symbol_id) = self.table.resolve_qualified(&parts) {
-                            if self
-                                .table
-                                .get(symbol_id)
-                                .is_some_and(|symbol| !symbol.is_constant)
-                            {
-                                return Err(ConstEvalError::NotConstant);
-                            }
-                        }
+                    if matches!(resolved, Err(ConstEvalError::UndefinedName(_)))
+                        && let Some(symbol_id) = self.table.resolve_qualified(&parts)
+                        && self
+                            .table
+                            .get(symbol_id)
+                            .is_some_and(|symbol| !symbol.is_constant)
+                    {
+                        return Err(ConstEvalError::NotConstant);
                     }
                     return resolved;
                 }
@@ -348,6 +349,7 @@ impl SymbolCollector<'_> {
             .const_exprs
             .get(&key)
             .cloned()
+            .map(|(_, expr)| expr)
             .ok_or_else(|| ConstEvalError::UndefinedName(SmolStr::new(name)))?;
         if !guard.insert(key.clone()) {
             return Err(ConstEvalError::CyclicDependency(key.1));

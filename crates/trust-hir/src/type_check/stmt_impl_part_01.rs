@@ -25,11 +25,9 @@ impl<'a, 'b> StmtChecker<'a, 'b> {
         }
     }
 
-
     fn check_expression(&mut self, node: &SyntaxNode) -> TypeId {
         self.checker.expr().check_expression(node)
     }
-
 
     fn check_assignment(&mut self, node: &SyntaxNode) {
         let children: Vec<_> = node.children().collect();
@@ -40,6 +38,7 @@ impl<'a, 'b> StmtChecker<'a, 'b> {
         let target = &children[0];
         let value = &children[1];
         let is_ref_assign = assignment_is_ref(node);
+        let is_ref_bind = assignment_is_ref_bind(node);
 
         // Check target is a valid l-value
         if !self.checker.is_valid_lvalue(target) {
@@ -52,10 +51,10 @@ impl<'a, 'b> StmtChecker<'a, 'b> {
         }
 
         let resolved_target = self.checker.assignment_target_symbol(target);
-        if let Some(resolved) = &resolved_target {
-            if !resolved.accessible {
-                return;
-            }
+        if let Some(resolved) = &resolved_target
+            && !resolved.accessible
+        {
+            return;
         }
 
         // Check target is not a constant
@@ -85,6 +84,11 @@ impl<'a, 'b> StmtChecker<'a, 'b> {
         if self.checker.is_return_target(target) {
             self.checker.saw_return_value = true;
             self.checker.return_value_definitely_assigned = true;
+        }
+
+        if is_ref_bind {
+            self.check_ref_bind_assignment(target, value);
+            return;
         }
 
         if is_ref_assign {
@@ -129,7 +133,6 @@ impl<'a, 'b> StmtChecker<'a, 'b> {
         }
     }
 
-
     fn check_if_stmt(&mut self, node: &SyntaxNode) {
         let incoming = self.checker.return_value_definitely_assigned;
         let mut branch_states = vec![self.check_statement_children_with_state(node, incoming)];
@@ -146,13 +149,13 @@ impl<'a, 'b> StmtChecker<'a, 'b> {
         for child in node.children() {
             match child.kind() {
                 SyntaxKind::ElsifBranch | SyntaxKind::ElseBranch => {
-                    if child.kind() == SyntaxKind::ElsifBranch {
-                        if let Some(expr) = first_expression_child(&child) {
-                            let cond_type = self.check_expression(&expr);
-                            self.checker
-                                .expr()
-                                .check_boolean(cond_type, expr.text_range());
-                        }
+                    if child.kind() == SyntaxKind::ElsifBranch
+                        && let Some(expr) = first_expression_child(&child)
+                    {
+                        let cond_type = self.check_expression(&expr);
+                        self.checker
+                            .expr()
+                            .check_boolean(cond_type, expr.text_range());
                     }
                     branch_states.push(self.check_statement_children_with_state(&child, incoming));
                 }
@@ -170,5 +173,4 @@ impl<'a, 'b> StmtChecker<'a, 'b> {
         self.checker.return_value_definitely_assigned =
             branch_states.into_iter().all(std::convert::identity);
     }
-
 }
