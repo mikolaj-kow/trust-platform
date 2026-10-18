@@ -23,10 +23,19 @@ Implementation owners:
   session, worker, driver, and Sparkplug profile;
 - `crates/trust-runtime/src/io/mqtt_tag_mapping.rs`: startup-only adapter from
   compiled PLC symbols to typed process-image points;
-- `crates/trust-runtime/src/io/interface.rs`: shared binding transaction and
-  snapshot metadata, without broker knowledge; and
+- `crates/trust-runtime/src/runtime/installed_bindings.rs`: the shared binding
+  transaction that installs a complete mapping set, without broker knowledge;
+- `crates/trust-runtime/src/io/interface.rs`: process-image bindings, scan
+  synchronization and snapshot metadata, without broker knowledge; and
 - `crates/trust-runtime/src/connectors/adapters/mqtt.rs`: projection into the
   shared connector-status contract, without transport behavior.
+
+The Rust 1.99 / edition 2024 modernization in
+[`34-runtime-portability.md`](34-runtime-portability.md) §16 rewrites nested MQTT
+guards as let chains while preserving their evaluation order, short-circuiting
+and binding scope. It does not change mapping validation, payload conversion,
+topic selection, session/reconnection behavior, security, driver health or the
+process-image exchange contract defined here.
 
 ## 2. Project configuration authority
 
@@ -81,6 +90,17 @@ not by itself prove a broker handshake.
 Username and password are an all-or-nothing pair. Secrets must not appear in
 connector reports, audit details, discovery results, or diagnostics.
 
+A redacted web or IDE configuration edit may retain a stored MQTT password only
+when its authentication context is unchanged. The same MQTT parser used for
+connection setup supplies the effective host/port, TLS material and trimmed
+CA/client-certificate/key paths, ALPN, username, client ID and insecure-remote
+policy for this comparison, including defaults. This applies to both `mqtt`
+and `mqtt-tcp`. Topic, mapping and timing edits do not change that context.
+Changing it requires explicit replacement credentials, and a rejected edit
+writes nothing. Specification 11 §6.9.7 defines the shared JSON/text/IDE save
+contract, literal-marker handling and credential-safe errors. This comparison
+does not freeze external DNS or file contents at an unchanged TLS path.
+
 ## 4. Exchange modes and fallback selection
 
 MQTT supports three explicit exchange forms:
@@ -129,8 +149,16 @@ mappings.
 
 Existing compatible direct `%I` or `%Q` bindings are reused. Otherwise the
 startup adapter allocates deterministic non-overlapping process-image storage
-after the declared image. The worker receives only typed point descriptions and
-process-image snapshots; it cannot access program storage or resolve symbols.
+after the declared image. The complete mapping set and any image growth are
+installed as one resource-only direct-I/O binding reconfiguration
+([34-runtime-portability.md](34-runtime-portability.md) §4.3.1): PLC storage and
+values are kept and initializers do not rerun. A reused binding keeps its
+position and receives the mapping's codec, including enumeration labels. A
+refused reconfiguration leaves the installed resource, bindings and images
+unchanged. A runtime admitted from a 1.1 artifact exports the updated 3.0
+container afterwards ([12-bytecode.md](12-bytecode.md) §4.4). The worker
+receives only typed point descriptions and process-image snapshots; it cannot
+access program storage or resolve symbols.
 
 ## 6. Scalar and enumeration contract
 
@@ -189,6 +217,25 @@ is the authoritative snapshot. Reconnection uses a nonzero bounded backoff and
 cannot busy-loop. Driver drop requests shutdown and returns within its bounded
 deadline even while a first connection is pending; this does not claim that a
 detached worker has already joined.
+
+Backoff follows connection failures only: a failed connect, a lost session or a
+failed publish. Input freshness is an input-path condition: the worker checks for
+new input without waiting, so an input read never holds the worker or delays
+output publication. A read that finds no message newer than the previous read
+reports stale input under the policy below, but a connected session stays
+connected, starts no backoff and keeps publishing outputs.
+
+The driver therefore tracks two paths. Input-path health covers stale or missing
+input and decoding; output-path health reflects only the broker connection and
+the publish outcomes, and it decides whether a safe-state handoff is confirmed
+(specification 11). A connection condition (not yet connected, a lost session,
+reconnect backoff) clears as soon as any operation finds the link up; a publish
+condition (a failed typed-output preflight or a pending handoff) clears only
+with a successful publish. The reported driver health is the more severe of the two,
+with the output-path detail on a tie, and an incoming-queue overflow degrades it
+further (specification 34 §11.1). A direction the configuration disables is
+always healthy: a driver without outputs has nothing to deliver for a safe
+state, and a driver without inputs reports no input condition.
 
 Under the default `fault` policy, disconnected or stale input, a bounded read
 without a snapshot, missed refresh/handoff deadlines, completed connection or
@@ -271,7 +318,11 @@ but version-reporting status is not an MQTT behavior assertion.
 The closest native owners include:
 
 - `crates/trust-runtime/src/io/mqtt/tests/tag_mapping.rs` for direction, raw
-  fallback selection, empty mapping presence, mixed points, and mapped output;
+  fallback selection, empty mapping presence, mixed points, mapped output, and
+  installation into a runtime admitted from a 1.1 artifact;
+- `crates/trust-runtime/src/bin/trust-runtime/run/tests/mqtt_tag_mapping.rs`
+  for bindings installed before the worker starts and atomic refusal of a
+  mapping set with an unknown tag;
 - `crates/trust-runtime/src/io/mqtt/tests/point_map_contract.rs` and
   `io/mqtt/point_map.rs` tests for typed payload conversion and transaction
   integrity;

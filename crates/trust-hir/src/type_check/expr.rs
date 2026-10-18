@@ -194,10 +194,10 @@ impl<'a, 'b> ExprChecker<'a, 'b> {
                         format!("ambiguous enum value '{}'; qualify it with its type", name),
                     );
                 }
-                if self.checker.is_return_target(node) {
-                    if let Some(return_type) = self.checker.current_function_return {
-                        return return_type;
-                    }
+                if self.checker.is_return_target(node)
+                    && let Some(return_type) = self.checker.current_function_return
+                {
+                    return return_type;
                 }
                 if symbol.edge_qualifier.is_some()
                     && self
@@ -225,16 +225,15 @@ impl<'a, 'b> ExprChecker<'a, 'b> {
                         format!("{role} '{}' cannot be used as a value", symbol.name),
                     );
                 }
-                if resolved.accessible {
-                    if let SymbolKind::Property { has_get, .. } = symbol.kind {
-                        if !has_get {
-                            self.checker.diagnostics.error(
-                                DiagnosticCode::InvalidOperation,
-                                node.text_range(),
-                                format!("property '{}' has no getter", symbol.name),
-                            );
-                        }
-                    }
+                if resolved.accessible
+                    && let SymbolKind::Property { has_get, .. } = symbol.kind
+                    && !has_get
+                {
+                    self.checker.diagnostics.error(
+                        DiagnosticCode::InvalidOperation,
+                        node.text_range(),
+                        format!("property '{}' has no getter", symbol.name),
+                    );
                 }
                 symbol.type_id
             }
@@ -391,13 +390,18 @@ impl<'a, 'b> ExprChecker<'a, 'b> {
         rhs_type: TypeId,
         rhs_node: &SyntaxNode,
     ) -> (TypeId, TypeId) {
-        if self.checker.is_contextual_int_literal(rhs_type, lhs_node)
+        // Comparisons do not enforce a subrange's bounds, so a literal takes the base type.
+        if self
+            .checker
+            .is_contextual_base_int_literal(rhs_type, lhs_node)
             || self.checker.is_contextual_real_literal(rhs_type, lhs_node)
         {
             self.checker.record_expression_type(lhs_node, rhs_type);
             return (rhs_type, rhs_type);
         }
-        if self.checker.is_contextual_int_literal(lhs_type, rhs_node)
+        if self
+            .checker
+            .is_contextual_base_int_literal(lhs_type, rhs_node)
             || self.checker.is_contextual_real_literal(lhs_type, rhs_node)
         {
             self.checker.record_expression_type(rhs_node, lhs_type);
@@ -417,6 +421,7 @@ impl<'a, 'b> ExprChecker<'a, 'b> {
         };
 
         let op = UnaryOp::from_node(node);
+        let operand = self.checker.deref_reference_type(operand);
 
         match op {
             UnaryOp::Neg => {
@@ -425,10 +430,10 @@ impl<'a, 'b> ExprChecker<'a, 'b> {
                         .checker
                         .legacy_suppressed_type(DiagnosticCode::CannotResolve, node.text_range());
                 }
-                if let Some(ty) = self.checker.resolved_type(operand) {
-                    if ty.is_numeric() {
-                        return operand;
-                    }
+                if let Some(ty) = self.checker.resolved_type(operand)
+                    && ty.is_numeric()
+                {
+                    return operand;
                 }
                 self.checker.legacy_diagnostic_type(
                     DiagnosticCode::TypeMismatch,
@@ -653,8 +658,12 @@ impl<'a, 'b> ExprChecker<'a, 'b> {
         rhs: TypeId,
         range: TextRange,
     ) -> TypeId {
-        let lhs = self.checker.resolve_subrange_base(lhs);
-        let rhs = self.checker.resolve_subrange_base(rhs);
+        let lhs = self
+            .checker
+            .deref_reference_type(self.checker.resolve_subrange_base(lhs));
+        let rhs = self
+            .checker
+            .deref_reference_type(self.checker.resolve_subrange_base(rhs));
         if lhs == TypeId::UNKNOWN || rhs == TypeId::UNKNOWN {
             return self
                 .checker

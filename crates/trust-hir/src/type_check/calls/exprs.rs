@@ -15,6 +15,12 @@ impl<'a, 'b> CallChecker<'a, 'b> {
 
         let base_type = self.checker.expr().check_expression(&children[0]);
         let resolved_base = self.checker.resolve_alias_type(base_type);
+        // CODESYS-style reference auto-deref: indexing a reference to an
+        // array/string indexes the referenced value.
+        let resolved_base = match self.checker.symbols.type_by_id(resolved_base) {
+            Some(Type::Reference { target }) => self.checker.resolve_alias_type(*target),
+            _ => resolved_base,
+        };
         let index_count = children.len().saturating_sub(1);
         let mut index_exprs = Vec::new();
 
@@ -23,14 +29,17 @@ impl<'a, 'b> CallChecker<'a, 'b> {
             let idx_type_raw = self.checker.expr().check_expression(idx_expr);
             let idx_type = self.checker.resolve_alias_type(idx_type_raw);
             index_exprs.push((idx_expr.clone(), idx_type_raw, idx_type));
-            if let Some(ty) = self.checker.symbols.type_by_id(idx_type) {
-                if !ty.is_integer() {
-                    self.checker.diagnostics.error(
-                        DiagnosticCode::InvalidArrayIndex,
-                        idx_expr.text_range(),
-                        "array index must be an integer type",
-                    );
-                }
+            // CODESYS parity (vendor extension): enum-typed subscripts
+            // are accepted alongside integer subscripts.
+            if let Some(ty) = self.checker.symbols.type_by_id(idx_type)
+                && !ty.is_integer()
+                && !matches!(ty, Type::Enum { .. })
+            {
+                self.checker.diagnostics.error(
+                    DiagnosticCode::InvalidArrayIndex,
+                    idx_expr.text_range(),
+                    "array index must be an integer type",
+                );
             }
         }
 
@@ -134,19 +143,38 @@ impl<'a, 'b> CallChecker<'a, 'b> {
         if let Some(symbol_id) = self
             .checker
             .resolve_ref()
-            .resolve_namespace_qualified_symbol(node)
+            .resolve_program_qualified_member(node)
+            && let Some(symbol) = self.checker.symbols.get(symbol_id)
         {
-            if let Some(symbol) = self.checker.symbols.get(symbol_id) {
-                if let Some(role) = non_value_role(&symbol.kind) {
-                    let name = symbol.name.clone();
-                    return self.checker.diagnostic_type_outcome(
-                        DiagnosticCode::InvalidOperation,
-                        node.text_range(),
-                        format!("{role} '{name}' cannot be used as a value"),
-                    );
-                }
-                return SemanticOutcome::Resolved(symbol.type_id);
+            return SemanticOutcome::Resolved(symbol.type_id);
+        }
+
+        // CODESYS qualified enum member access (`EnumType.Member`): the base
+        // names a type, not a value, so resolve the member directly to the
+        // enum type instead of reporting the type as a value.
+        if let Some(enum_type) = self
+            .checker
+            .resolve_ref()
+            .resolve_qualified_enum_member(node)
+        {
+            return SemanticOutcome::Resolved(enum_type);
+        }
+
+        if let Some(symbol_id) = self
+            .checker
+            .resolve_ref()
+            .resolve_namespace_qualified_symbol(node)
+            && let Some(symbol) = self.checker.symbols.get(symbol_id)
+        {
+            if let Some(role) = non_value_role(&symbol.kind) {
+                let name = symbol.name.clone();
+                return self.checker.diagnostic_type_outcome(
+                    DiagnosticCode::InvalidOperation,
+                    node.text_range(),
+                    format!("{role} '{name}' cannot be used as a value"),
+                );
             }
+            return SemanticOutcome::Resolved(symbol.type_id);
         }
 
         let base = &children[0];
@@ -169,6 +197,16 @@ impl<'a, 'b> CallChecker<'a, 'b> {
                 .checker
                 .suppressed_type_outcome(DiagnosticCode::CannotResolve, base.text_range());
         }
+
+        // CODESYS-style reference auto-deref: member access on a reference
+        // resolves against the referenced type.
+        let (base_type, resolved_base) = match self.checker.symbols.type_by_id(resolved_base) {
+            Some(Type::Reference { target }) => {
+                let deref_type = *target;
+                (deref_type, self.checker.resolve_alias_type(deref_type))
+            }
+            _ => (base_type, resolved_base),
+        };
 
         if let Some(ty) = self.checker.symbols.type_by_id(resolved_base) {
             match ty {
@@ -195,16 +233,15 @@ impl<'a, 'b> CallChecker<'a, 'b> {
                         let Some(symbol) = self.checker.symbols.get(resolved.id) else {
                             return self.checker.unknown_type_outcome(member.text_range());
                         };
-                        if resolved.accessible {
-                            if let SymbolKind::Property { has_get, .. } = symbol.kind {
-                                if !has_get {
-                                    self.checker.diagnostics.error(
-                                        DiagnosticCode::InvalidOperation,
-                                        member.text_range(),
-                                        format!("property '{}' has no getter", symbol.name),
-                                    );
-                                }
-                            }
+                        if resolved.accessible
+                            && let SymbolKind::Property { has_get, .. } = symbol.kind
+                            && !has_get
+                        {
+                            self.checker.diagnostics.error(
+                                DiagnosticCode::InvalidOperation,
+                                member.text_range(),
+                                format!("property '{}' has no getter", symbol.name),
+                            );
                         }
                         return SemanticOutcome::Resolved(symbol.type_id);
                     }
@@ -375,14 +412,14 @@ impl<'a, 'b> CallChecker<'a, 'b> {
         diagnostic: DiagnosticCode,
         kind: &str,
     ) {
-        if let Some(value_int) = self.checker.eval_const_int_expr_or_report(expr) {
-            if value_int < lower || value_int > upper {
-                self.checker.diagnostics.error(
-                    diagnostic,
-                    expr.text_range(),
-                    format!("{kind} index {value_int} outside bounds {lower}..{upper}"),
-                );
-            }
+        if let Some(value_int) = self.checker.eval_const_int_expr_or_report(expr)
+            && (value_int < lower || value_int > upper)
+        {
+            self.checker.diagnostics.error(
+                diagnostic,
+                expr.text_range(),
+                format!("{kind} index {value_int} outside bounds {lower}..{upper}"),
+            );
         }
     }
 }

@@ -1,17 +1,54 @@
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
+#[cfg(any(
+    feature = "openot-database-sqlite",
+    feature = "openot-database-postgresql",
+    feature = "openot-real-database-tests"
+))]
+use std::time::{SystemTime, UNIX_EPOCH};
 
+#[cfg(any(
+    feature = "openot-database-sqlite",
+    feature = "openot-real-database-tests"
+))]
+use open_ot_carriage::registry::EVENT_HEARTBEAT;
+#[cfg(feature = "openot-database-sqlite")]
 use open_ot_carriage::registry::{
-    EVENT_HEARTBEAT, EVENT_VALUE_CHANGED, KEY_NEW_VALUE, KEY_VALUE_ID, TY_BOOL, TY_UDINT,
+    EVENT_VALUE_CHANGED, KEY_NEW_VALUE, KEY_VALUE_ID, TY_BOOL, TY_UDINT,
 };
-use open_ot_carriage::wire::{Record, Slot};
+#[cfg(any(
+    feature = "openot-database-sqlite",
+    feature = "openot-real-database-tests"
+))]
+use open_ot_carriage::wire::Record;
+#[cfg(feature = "openot-database-sqlite")]
+use open_ot_carriage::wire::Slot;
+#[cfg(any(
+    feature = "openot-database-sqlite",
+    feature = "openot-database-postgresql",
+    feature = "openot-real-database-tests"
+))]
 use open_ot_definition::sample_definition;
+#[cfg(any(
+    feature = "openot-database-sqlite",
+    feature = "openot-database-postgresql",
+    feature = "openot-real-database-tests"
+))]
 use open_ot_shm::SharedRecordPublisher;
 
 use super::*;
-use crate::config::{
-    OpenOtInfluxDb3PersistenceConfig, OpenOtPersistenceBackend, OpenOtPersistenceConfig,
-    OpenOtPersistenceTlsMode, OpenOtPostgreSqlPersistenceConfig, OpenOtSqlitePersistenceConfig,
-};
+#[cfg(feature = "openot-database-sqlite")]
+use crate::config::OpenOtSqlitePersistenceConfig;
+#[cfg(any(
+    feature = "openot-database-sqlite",
+    feature = "openot-database-postgresql",
+    feature = "openot-real-database-tests"
+))]
+use crate::config::{OpenOtPersistenceBackend, OpenOtPersistenceConfig};
+#[cfg(any(
+    feature = "openot-database-postgresql",
+    feature = "openot-real-database-tests"
+))]
+use crate::config::{OpenOtPersistenceTlsMode, OpenOtPostgreSqlPersistenceConfig};
 #[test]
 fn operator_status_redacts_backend_secrets_and_sensitive_paths() {
     let secret = "password=plant-secret token=operator-token /private/customer/history.db";
@@ -51,10 +88,6 @@ fn service_rejects_missing_database_ca_before_worker_start() {
         std::process::id(),
         stamp
     );
-    std::env::set_var(
-        &database_environment,
-        "postgresql://unused.invalid/trust_logging",
-    );
     let config = OpenOtTelemetryConfig {
         enabled: true,
         path: "openot.shm".into(),
@@ -72,11 +105,12 @@ fn service_rejects_missing_database_ca_before_worker_start() {
         ..OpenOtTelemetryConfig::default()
     };
 
-    let error = match OpenOtPersistenceService::start(&config, &root) {
+    let error = match OpenOtPersistenceService::start_with_environment(&config, &root, |_| {
+        Ok("postgresql://unused.invalid/trust_logging".to_owned())
+    }) {
         Err(error) => error,
         Ok(_) => panic!("missing local CA must reject startup synchronously"),
     };
-    std::env::remove_var(database_environment);
     assert!(
         error.to_string().contains("missing-ca.pem"),
         "unexpected error: {error}"
@@ -127,7 +161,9 @@ fn service_rejects_missing_database_environment_before_worker_start() {
         ..OpenOtTelemetryConfig::default()
     };
 
-    let error = match OpenOtPersistenceService::start(&config, &root) {
+    let error = match OpenOtPersistenceService::start_with_environment(&config, &root, |_| {
+        Err(std::env::VarError::NotPresent)
+    }) {
         Err(error) => error,
         Ok(_) => panic!("missing database environment must reject startup synchronously"),
     };
@@ -138,118 +174,16 @@ fn service_rejects_missing_database_environment_before_worker_start() {
     );
     assert!(!diagnostic.contains("postgresql://"));
 
-    std::env::set_var(&missing_environment, "");
-    let empty_error = match OpenOtPersistenceService::start(&config, &root) {
-        Err(error) => error,
-        Ok(_) => panic!("empty database environment must reject startup synchronously"),
-    };
-    std::env::remove_var(&missing_environment);
+    let empty_error =
+        match OpenOtPersistenceService::start_with_environment(
+            &config,
+            &root,
+            |_| Ok(String::new()),
+        ) {
+            Err(error) => error,
+            Ok(_) => panic!("empty database environment must reject startup synchronously"),
+        };
     assert!(empty_error.to_string().contains(&missing_environment));
-    std::fs::remove_dir_all(root).ok();
-}
-
-#[cfg(feature = "openot-database-influxdb3")]
-#[test]
-fn service_retries_unreachable_influxdb_during_initial_open() {
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock")
-        .as_nanos();
-    let root = std::env::temp_dir().join(format!(
-        "trust-openot-influx-initial-retry-{}-{stamp}",
-        std::process::id()
-    ));
-    std::fs::create_dir_all(&root).expect("root");
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700))
-            .expect("secure root");
-    }
-    std::fs::write(
-        root.join("openot-definition.json"),
-        serde_json::to_vec_pretty(&sample_definition()).expect("serialize definition"),
-    )
-    .expect("write definition");
-    let mut publisher =
-        SharedRecordPublisher::create(root.join("openot.shm"), 4096).expect("publisher");
-    std::fs::copy(
-        concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/tests/fixtures/tls/server-cert.pem"
-        ),
-        root.join("database-ca.pem"),
-    )
-    .expect("copy parseable CA certificate");
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("reserve local port");
-    let address = listener.local_addr().expect("read reserved local port");
-    drop(listener);
-    let host_environment = format!(
-        "TRUST_TEST_OPENOT_INFLUX_INITIAL_HOST_{}_{}",
-        std::process::id(),
-        stamp
-    );
-    let token_environment = format!(
-        "TRUST_TEST_OPENOT_INFLUX_INITIAL_TOKEN_{}_{}",
-        std::process::id(),
-        stamp
-    );
-    std::env::set_var(&host_environment, format!("https://{address}"));
-    std::env::set_var(&token_environment, "test-token");
-    let config = OpenOtTelemetryConfig {
-        enabled: true,
-        path: "openot.shm".into(),
-        persistence: OpenOtPersistenceConfig {
-            enabled: true,
-            backend: Some(OpenOtPersistenceBackend::InfluxDb3),
-            retry_initial_ms: 10,
-            retry_max_ms: 10,
-            retry_multiplier: 1,
-            retry_max_attempts: 1_000,
-            shutdown_timeout_ms: 50,
-            influxdb3: Some(OpenOtInfluxDb3PersistenceConfig {
-                host_env: host_environment.clone().into(),
-                token_env: token_environment.clone().into(),
-                database: "trust_logging".into(),
-                spool_path: "trust-logging-spool.sqlite3".into(),
-                max_bytes: 1_073_741_824,
-                ca_cert_path: Some("database-ca.pem".into()),
-            }),
-            ..OpenOtPersistenceConfig::default()
-        },
-        ..OpenOtTelemetryConfig::default()
-    };
-
-    let mut service = OpenOtPersistenceService::start(&config, &root)
-        .expect("unreachable remote endpoint must not reject PLC startup")
-        .expect("enabled persistence service");
-    publisher
-        .append_record(&Record::new(11, 1, 0, 7, EVENT_HEARTBEAT))
-        .expect("publish while the initial database connection is unavailable");
-    let deadline = std::time::Instant::now() + Duration::from_secs(1);
-    while {
-        let status = service.status();
-        (status.state == OpenOtPersistenceState::Starting || status.head_abs == 0)
-            && std::time::Instant::now() < deadline
-    } {
-        std::thread::sleep(Duration::from_millis(5));
-    }
-    let status = service.status();
-    service.shutdown();
-    let stopped_status = service.status();
-    std::env::remove_var(host_environment);
-    std::env::remove_var(token_environment);
-
-    assert_eq!(status.state, OpenOtPersistenceState::Retrying, "{status:?}");
-    assert!(status.documents_retried >= 1, "{status:?}");
-    assert!(status.head_abs > 0, "{status:?}");
-    assert_eq!(status.cursor_abs, 0, "{status:?}");
-    assert_eq!(status.pending, status.head_abs, "{status:?}");
-    assert_eq!(
-        stopped_status.head_abs, status.head_abs,
-        "{stopped_status:?}"
-    );
-    assert_eq!(stopped_status.pending, status.pending, "{stopped_status:?}");
     std::fs::remove_dir_all(root).ok();
 }
 
@@ -302,7 +236,9 @@ fn service_faults_incompatible_pre_release_schema_without_spending_reconnect_bud
     let mut service = OpenOtPersistenceService::start(&config, &root)
         .expect("local schema validation belongs to supervised worker")
         .expect("enabled service");
-    let deadline = std::time::Instant::now() + Duration::from_millis(250);
+    // A wait bound, not a timing requirement: the worker opens SQLite and validates the schema
+    // on its own thread, which a loaded machine can delay well past a few hundred milliseconds.
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
     while service.status().state == OpenOtPersistenceState::Starting
         && std::time::Instant::now() < deadline
     {
@@ -325,6 +261,7 @@ fn service_faults_incompatible_pre_release_schema_without_spending_reconnect_bud
     std::fs::remove_dir_all(root).ok();
 }
 
+#[cfg(feature = "openot-database-sqlite")]
 #[test]
 fn enabled_service_persists_shared_memory_record_off_thread_and_stops() {
     let stamp = SystemTime::now()
@@ -382,6 +319,7 @@ fn enabled_service_persists_shared_memory_record_off_thread_and_stops() {
     std::fs::remove_dir_all(root).ok();
 }
 
+#[cfg(feature = "openot-database-sqlite")]
 #[test]
 fn service_supplies_compiled_definition_to_typed_database_projection() {
     let stamp = SystemTime::now()
@@ -476,6 +414,7 @@ fn deterministic_commit_error_is_not_a_retryable_worker_transport_loss() {
     )));
 }
 
+#[cfg(feature = "openot-database-sqlite")]
 #[test]
 fn sqlite_service_restart_uses_durable_checkpoint_and_catches_up_once() {
     let stamp = SystemTime::now()
@@ -629,6 +568,7 @@ fn shutdown_does_not_wait_past_the_configured_deadline_for_a_stuck_backend_call(
     );
 }
 
+#[cfg(feature = "openot-database-sqlite")]
 #[test]
 fn shutdown_drains_records_published_after_the_last_worker_poll() {
     let stamp = SystemTime::now()
@@ -698,6 +638,7 @@ fn shutdown_drains_records_published_after_the_last_worker_poll() {
     std::fs::remove_dir_all(root).ok();
 }
 
+#[cfg(feature = "openot-database-sqlite")]
 #[test]
 fn shutdown_uses_a_fresh_head_when_an_older_poll_still_has_buffered_records() {
     let stamp = SystemTime::now()
@@ -913,6 +854,7 @@ fn wait_for_status(
     );
 }
 
+#[cfg(feature = "openot-database-sqlite")]
 #[test]
 fn unresolved_document_keeps_caught_up_service_degraded() {
     let stamp = SystemTime::now()

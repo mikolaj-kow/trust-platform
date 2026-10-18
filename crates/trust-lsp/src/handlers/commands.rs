@@ -163,18 +163,18 @@ fn project_info_value_with_context<C: ServerContext>(
     args: Vec<Value>,
 ) -> Option<Value> {
     let mut configs = context.workspace_configs();
-    if args.len() == 1 {
-        if let Ok(parsed) = serde_json::from_value::<ProjectInfoCommandArgs>(
+    if args.len() == 1
+        && let Ok(parsed) = serde_json::from_value::<ProjectInfoCommandArgs>(
             args.into_iter().next().unwrap_or(Value::Null),
-        ) {
-            if let Some(root_uri) = parsed.root_uri {
-                configs.retain(|(root, _)| root == &root_uri);
-            } else if let Some(text_document) = parsed.text_document {
-                if let Some(config) = context.workspace_config_for_uri(&text_document.uri) {
-                    let root_uri = path_to_uri(&config.root).unwrap_or(text_document.uri.clone());
-                    configs = vec![(root_uri, config)];
-                }
-            }
+        )
+    {
+        if let Some(root_uri) = parsed.root_uri {
+            configs.retain(|(root, _)| root == &root_uri);
+        } else if let Some(text_document) = parsed.text_document
+            && let Some(config) = context.workspace_config_for_uri(&text_document.uri)
+        {
+            let root_uri = path_to_uri(&config.root).unwrap_or(text_document.uri.clone());
+            configs = vec![(root_uri, config)];
         }
     }
 
@@ -297,6 +297,7 @@ fn hmi_init_value_with_context<C: ServerContext>(context: &C, args: Vec<Value>) 
     let snapshot = DebugSnapshot {
         storage: runtime.storage().clone(),
         now: runtime.current_time(),
+        storage_abi: metadata.storage_abi(),
     };
     let source_refs = sources
         .iter()
@@ -371,6 +372,7 @@ fn hmi_bindings_value_with_context<C: ServerContext>(
     let snapshot = DebugSnapshot {
         storage: runtime.storage().clone(),
         now: runtime.current_time(),
+        storage_abi: metadata.storage_abi(),
     };
     let source_refs = sources
         .iter()

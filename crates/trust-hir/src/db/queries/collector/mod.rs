@@ -5,6 +5,7 @@ mod collect;
 mod const_eval;
 mod const_utils;
 mod precollect;
+mod storage;
 mod types;
 mod validation;
 mod variable_initializers;
@@ -12,12 +13,17 @@ mod variables;
 
 pub(super) struct SymbolCollector<'a> {
     table: SymbolTable,
+    temporal_storage: TemporalStorage,
     diagnostics: DiagnosticBuilder,
     pending_types: Vec<PendingType>,
     /// Parent symbol stack for nested declarations.
     parent_stack: Vec<SymbolId>,
-    const_exprs: FxHashMap<(Option<SmolStr>, SmolStr), SyntaxNode>,
+    const_exprs: FxHashMap<(Option<SmolStr>, SmolStr), (FileId, SyntaxNode)>,
     const_values: FxHashMap<(Option<SmolStr>, SmolStr), i64>,
+    /// When set (project analysis), constant-eval errors are only reported
+    /// for entries collected from this file — a stub's failures must not
+    /// surface under another file's path.
+    const_origin_filter: Option<FileId>,
     program_instances: ProgramInstanceMap,
     project_types: Option<&'a dyn ProjectTypeProvider>,
     importing_project_types: FxHashSet<SmolStr>,
@@ -30,14 +36,21 @@ impl<'a> SymbolCollector<'a> {
         Self::build(Some(project_types))
     }
 
+    pub(super) fn with_temporal_storage(mut self, storage: TemporalStorage) -> Self {
+        self.temporal_storage = storage;
+        self
+    }
+
     fn build(project_types: Option<&'a dyn ProjectTypeProvider>) -> Self {
         Self {
             table: SymbolTable::new(),
+            temporal_storage: TemporalStorage::default(),
             diagnostics: DiagnosticBuilder::new(),
             pending_types: Vec::new(),
             parent_stack: Vec::new(),
             const_exprs: FxHashMap::default(),
             const_values: FxHashMap::default(),
+            const_origin_filter: None,
             program_instances: FxHashMap::default(),
             project_types,
             importing_project_types: FxHashSet::default(),
@@ -61,10 +74,12 @@ impl<'a> SymbolCollector<'a> {
     pub(crate) fn collect_for_project_with_const_roots(
         mut self,
         root: &SyntaxNode,
-        const_roots: &[SyntaxNode],
+        origin_file_id: FileId,
+        const_roots: &[(FileId, SyntaxNode)],
     ) -> (SymbolTable, Vec<Diagnostic>, Vec<PendingType>) {
-        for project_root in const_roots {
-            self.precollect_constants(project_root, &[], &[]);
+        self.const_origin_filter = Some(origin_file_id);
+        for (origin, project_root) in const_roots {
+            self.precollect_constants(project_root, &[], &[], *origin);
         }
         self.phase_precollect(root);
         self.phase_collect_symbols(root);
@@ -76,10 +91,12 @@ impl<'a> SymbolCollector<'a> {
     pub(crate) fn collect_with_project_const_roots(
         mut self,
         root: &SyntaxNode,
-        const_roots: &[SyntaxNode],
+        origin_file_id: FileId,
+        const_roots: &[(FileId, SyntaxNode)],
     ) -> (SymbolTable, Vec<Diagnostic>) {
-        for project_root in const_roots {
-            self.precollect_constants(project_root, &[], &[]);
+        self.const_origin_filter = Some(origin_file_id);
+        for (origin, project_root) in const_roots {
+            self.precollect_constants(project_root, &[], &[], *origin);
         }
         self.collect(root)
     }
@@ -88,8 +105,9 @@ impl<'a> SymbolCollector<'a> {
         table: SymbolTable,
         root: &SyntaxNode,
         project_roots: &[SyntaxNode],
+        temporal_storage: TemporalStorage,
     ) -> (SymbolTable, Vec<Diagnostic>) {
-        let mut collector = Self::build(None);
+        let mut collector = Self::build(None).with_temporal_storage(temporal_storage);
         collector.table = table;
         collector.check_variable_initializer_constant_expressions(root);
         collector.phase_access_and_config(root);
@@ -100,7 +118,12 @@ impl<'a> SymbolCollector<'a> {
     fn phase_precollect(&mut self, root: &SyntaxNode) {
         self.precollect_pous(root, &[]);
         self.precollect_types(root, &[]);
-        self.precollect_constants(root, &[], &[]);
+        self.precollect_constants(
+            root,
+            &[],
+            &[],
+            self.const_origin_filter.unwrap_or(FileId(0)),
+        );
     }
 
     fn phase_collect_symbols(&mut self, root: &SyntaxNode) {

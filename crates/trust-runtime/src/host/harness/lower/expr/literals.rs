@@ -4,9 +4,9 @@ fn lower_literal_with_context(
     expected_type: Option<TypeId>,
 ) -> Result<Expr, CompileError> {
     let mut sign: i64 = 1;
-    let mut int_literal: Option<i64> = None;
+    let mut int_literal: Option<u64> = None;
     let mut bool_literal: Option<bool> = None;
-    let mut real_literal: Option<f64> = None;
+    let mut real_literal: Option<String> = None;
     let mut string_literal: Option<(String, bool)> = None;
     let mut typed_prefix: Option<String> = None;
     let mut ident_literal: Option<String> = None;
@@ -37,7 +37,7 @@ fn lower_literal_with_context(
                 int_literal = Some(parse_int_literal(token.text())?);
             }
             SyntaxKind::RealLiteral => {
-                real_literal = Some(parse_real_literal(token.text())?);
+                real_literal = Some(token.text().to_string());
             }
             SyntaxKind::StringLiteral => {
                 let parsed = parse_string_literal(token.text(), false)?;
@@ -67,6 +67,14 @@ fn lower_literal_with_context(
     }
 
     let has_typed_prefix = typed_prefix.is_some();
+    let typed_builtin = typed_prefix.as_deref().and_then(TypeId::from_builtin_name);
+    let negative = saw_sign && sign < 0;
+    // An integer literal takes the integer type its typed prefix names, or else the integer
+    // destination it is assigned or passed to. Any other destination keeps the i32 default.
+    let integer_target = match &typed_prefix {
+        Some(_) => typed_builtin.filter(|type_id| INTEGER_DESTINATIONS.contains(type_id)),
+        None => expected_type.and_then(|type_id| integer_destination(ctx.registry, type_id)),
+    };
     let mut value = if let Some(value) = value_literal {
         value
     } else if let Some((string, wide)) = string_literal {
@@ -77,18 +85,18 @@ fn lower_literal_with_context(
         }
     } else if let Some(value) = bool_literal {
         Value::Bool(value)
-    } else if let Some(value) = real_literal {
-        let signed = if saw_sign { value * sign as f64 } else { value };
-        Value::LReal(signed)
-    } else if let Some(value) = int_literal {
-        let value = if saw_sign { value * sign } else { value };
-        if has_typed_prefix {
-            Value::LInt(value)
+    } else if let Some(text) = real_literal {
+        if typed_builtin == Some(TypeId::REAL) {
+            // A REAL# literal is rounded once, from its decimal text, not through binary64.
+            let value = parse_real_literal_f32(&text)?;
+            Value::Real(if negative { -value } else { value })
         } else {
-            let value = i32::try_from(value)
-                .map_err(|_| CompileError::new("integer literal out of range"))?;
-            Value::DInt(value)
+            let value = parse_real_literal(&text)?;
+            let signed = if saw_sign { value * sign as f64 } else { value };
+            Value::LReal(signed)
         }
+    } else if let Some(magnitude) = int_literal {
+        integer_literal_value(magnitude, negative, integer_target, has_typed_prefix)?
     } else if ident_literal.is_some() {
         Value::Null
     } else {
@@ -101,41 +109,22 @@ fn lower_literal_with_context(
         } else {
             resolve_type_name(&prefix, ctx)?
         };
-        if let Some(ident) = ident_literal {
-            if let Some(value) = enum_literal_value(&ident, type_id, ctx.registry) {
-                return Ok(Expr::Literal(value));
-            }
+        if let Some(ident) = ident_literal
+            && let Some(value) = enum_literal_value(&ident, type_id, ctx.registry)
+        {
+            return Ok(Expr::Literal(value));
         }
         if value == Value::Null {
             return Err(CompileError::new("invalid typed literal"));
         }
         value = coerce_value_to_type(value, type_id)?;
-    } else if let Some(type_id) = expected_type {
-        if value != Value::Null {
-            value = coerce_evaluated_initializer_value(
-                value,
-                type_id,
-                ctx.registry,
-                &ctx.profile,
-            )?;
-        }
+    } else if let Some(type_id) = expected_type
+        && value != Value::Null
+    {
+        value = coerce_evaluated_initializer_value(value, type_id, ctx.registry, &ctx.profile)?;
     }
 
     Ok(Expr::Literal(value))
-}
-
-fn parse_int_literal(text: &str) -> Result<i64, CompileError> {
-    let cleaned: String = text.chars().filter(|c| *c != '_').collect();
-    if let Some((base_str, digits)) = cleaned.split_once('#') {
-        let base: u32 = base_str
-            .parse()
-            .map_err(|_| CompileError::new("invalid integer literal base"))?;
-        return i64::from_str_radix(digits, base)
-            .map_err(|_| CompileError::new("invalid integer literal"));
-    }
-    cleaned
-        .parse::<i64>()
-        .map_err(|_| CompileError::new("invalid integer literal"))
 }
 
 fn parse_real_literal(text: &str) -> Result<f64, CompileError> {
@@ -143,6 +132,18 @@ fn parse_real_literal(text: &str) -> Result<f64, CompileError> {
     cleaned
         .parse::<f64>()
         .map_err(|_| CompileError::new("invalid REAL literal"))
+}
+
+/// Parses a REAL# literal straight to binary32, so it is rounded once from the decimal text.
+fn parse_real_literal_f32(text: &str) -> Result<f32, CompileError> {
+    let cleaned: String = text.chars().filter(|c| *c != '_').collect();
+    let value = cleaned
+        .parse::<f32>()
+        .map_err(|_| CompileError::new("invalid REAL literal"))?;
+    if !value.is_finite() {
+        return Err(CompileError::new("initializer out of REAL range"));
+    }
+    Ok(value)
 }
 
 fn parse_string_literal(text: &str, is_wide: bool) -> Result<String, CompileError> {
@@ -318,15 +319,22 @@ fn nanos_to_ticks_checked(nanos: i64, profile: DateTimeProfile) -> Result<i64, C
     }
 }
 
+/// Fraction digits of one duration number that are kept. Each segment is scaled by
+/// `DURATION_SCALE` (10^18), so a segment with up to this many fraction digits adds up exactly.
+/// Digits past the kept ones move the segment by less than 10^-18 of its unit, so they can change
+/// the rounded result only when the exact value lies within that distance of a half nanosecond.
+const DURATION_FRACTION_DIGITS: usize = 18;
+const DURATION_SCALE: i128 = 1_000_000_000_000_000_000;
+
 fn parse_duration_nanos(text: &str) -> Result<i64, CompileError> {
     let upper = text.to_ascii_uppercase();
     let (_, raw) = upper
         .split_once('#')
         .ok_or_else(|| CompileError::new("invalid TIME literal"))?;
     let mut rest = raw.trim();
-    let mut sign: f64 = 1.0;
+    let mut negative = false;
     if let Some(stripped) = rest.strip_prefix('-') {
-        sign = -1.0;
+        negative = true;
         rest = stripped;
     } else if let Some(stripped) = rest.strip_prefix('+') {
         rest = stripped;
@@ -334,7 +342,8 @@ fn parse_duration_nanos(text: &str) -> Result<i64, CompileError> {
 
     let bytes = rest.as_bytes();
     let mut idx = 0usize;
-    let mut total: f64 = 0.0;
+    // Every segment in units of 10^-18 ns, so the only rounding is the final one below.
+    let mut scaled_total: i128 = 0;
     while idx < bytes.len() {
         let start = idx;
         while idx < bytes.len()
@@ -345,34 +354,76 @@ fn parse_duration_nanos(text: &str) -> Result<i64, CompileError> {
         if start == idx {
             return Err(CompileError::new("invalid TIME literal"));
         }
-        let num_str: String = rest[start..idx].chars().filter(|c| *c != '_').collect();
-        let value = num_str
-            .parse::<f64>()
-            .map_err(|_| CompileError::new("invalid TIME literal"))?;
+        let (whole, fraction) = parse_duration_number(&rest[start..idx])?;
         let unit_start = idx;
         while idx < bytes.len() && bytes[idx].is_ascii_alphabetic() {
             idx += 1;
         }
-        let unit = &rest[unit_start..idx];
-        let nanos_per = match unit {
-            "D" => 86_400_000_000_000.0,
-            "H" => 3_600_000_000_000.0,
-            "M" => 60_000_000_000.0,
-            "S" => 1_000_000_000.0,
-            "MS" => 1_000_000.0,
-            "US" => 1_000.0,
-            "NS" => 1.0,
+        let nanos_per: i128 = match &rest[unit_start..idx] {
+            "D" => 86_400_000_000_000,
+            "H" => 3_600_000_000_000,
+            "M" => 60_000_000_000,
+            "S" => 1_000_000_000,
+            "MS" => 1_000_000,
+            "US" => 1_000,
+            "NS" => 1,
             _ => return Err(CompileError::new("invalid TIME literal unit")),
         };
-        total += value * nanos_per;
+        let segment = whole
+            .checked_mul(DURATION_SCALE)
+            .and_then(|scaled| scaled.checked_add(fraction))
+            .and_then(|scaled| scaled.checked_mul(nanos_per))
+            .ok_or_else(duration_out_of_range)?;
+        scaled_total = scaled_total
+            .checked_add(segment)
+            .ok_or_else(duration_out_of_range)?;
         while idx < bytes.len() && bytes[idx] == b'_' {
             idx += 1;
         }
     }
-    let nanos = (total * sign).round();
-    let nanos =
-        i64::try_from(nanos as i128).map_err(|_| CompileError::new("TIME literal out of range"))?;
-    Ok(nanos)
+
+    // Round the magnitude half away from zero to whole nanoseconds, then apply the sign.
+    let half_up = scaled_total
+        .checked_add(DURATION_SCALE / 2)
+        .ok_or_else(duration_out_of_range)?;
+    let magnitude = half_up / DURATION_SCALE;
+    let nanos = if negative { -magnitude } else { magnitude };
+    i64::try_from(nanos).map_err(|_| duration_out_of_range())
+}
+
+/// Splits one duration number (`digits[.digits]`, with `_` separators) into its whole part and its
+/// first `DURATION_FRACTION_DIGITS` fraction digits, the latter scaled by `DURATION_SCALE`.
+fn parse_duration_number(text: &str) -> Result<(i128, i128), CompileError> {
+    let cleaned: String = text.chars().filter(|c| *c != '_').collect();
+    let (whole, fraction) = cleaned.split_once('.').unwrap_or((cleaned.as_str(), ""));
+    if whole.is_empty() && fraction.is_empty() {
+        return Err(CompileError::new("invalid TIME literal"));
+    }
+    if !is_duration_digits(whole) || !is_duration_digits(fraction) {
+        return Err(CompileError::new("invalid TIME literal"));
+    }
+    let whole_value = if whole.is_empty() {
+        0
+    } else {
+        whole.parse::<i128>().map_err(|_| duration_out_of_range())?
+    };
+    let kept = fraction.len().min(DURATION_FRACTION_DIGITS);
+    let mut fraction_value: i128 = 0;
+    for byte in fraction.bytes().take(kept) {
+        fraction_value = fraction_value * 10 + i128::from(byte - b'0');
+    }
+    for _ in kept..DURATION_FRACTION_DIGITS {
+        fraction_value *= 10;
+    }
+    Ok((whole_value, fraction_value))
+}
+
+fn duration_out_of_range() -> CompileError {
+    CompileError::new("TIME literal out of range")
+}
+
+fn is_duration_digits(text: &str) -> bool {
+    text.bytes().all(|byte| byte.is_ascii_digit())
 }
 
 fn parse_date_parts(text: &str) -> Result<(i64, i64, i64), CompileError> {
@@ -612,7 +663,11 @@ fn expression_scope_context(symbols: &SymbolTable, node: &SyntaxNode) -> Express
     }
 }
 
-fn class_owner_from_type(symbols: &SymbolTable, type_id: TypeId, allow_interface: bool) -> Option<SymbolId> {
+fn class_owner_from_type(
+    symbols: &SymbolTable,
+    type_id: TypeId,
+    allow_interface: bool,
+) -> Option<SymbolId> {
     let base_type = symbols.resolve_alias_type(type_id);
     let name = match symbols.type_by_id(base_type)? {
         Type::FunctionBlock { name } | Type::Class { name } => name,
@@ -627,13 +682,13 @@ fn current_class_owner(
     current_pou_symbol: Option<SymbolId>,
     this_type: Option<TypeId>,
 ) -> Option<SymbolId> {
-    if let Some(pou_id) = current_pou_symbol {
-        if let Some(symbol) = symbols.get(pou_id) {
-            match symbol.kind {
-                SymbolKind::Class | SymbolKind::FunctionBlock => return Some(pou_id),
-                SymbolKind::Method { .. } | SymbolKind::Property { .. } => return symbol.parent,
-                _ => {}
-            }
+    if let Some(pou_id) = current_pou_symbol
+        && let Some(symbol) = symbols.get(pou_id)
+    {
+        match symbol.kind {
+            SymbolKind::Class | SymbolKind::FunctionBlock => return Some(pou_id),
+            SymbolKind::Method { .. } | SymbolKind::Property { .. } => return symbol.parent,
+            _ => {}
         }
     }
 
@@ -676,10 +731,10 @@ fn resolve_name_symbol_in_scope(
         scope_id = scope.parent;
     }
 
-    if let Some(owner_id) = current_class_owner(symbols, current_pou_symbol, this_type) {
-        if let Some(member_id) = symbols.resolve_member_symbol_in_hierarchy(owner_id, name) {
-            return Some(member_id);
-        }
+    if let Some(owner_id) = current_class_owner(symbols, current_pou_symbol, this_type)
+        && let Some(member_id) = symbols.resolve_member_symbol_in_hierarchy(owner_id, name)
+    {
+        return Some(member_id);
     }
 
     if let Some(class_sid) = class_scope_id {

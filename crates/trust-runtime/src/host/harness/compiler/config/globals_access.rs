@@ -15,23 +15,26 @@ fn lower_global_var_block(
             .initializer
             .as_ref()
             .map(|expr| {
-                lower_expr(expr, ctx)
-                    .and_then(|lowered| resolve_initializer_enum_variant(expr, lowered, type_id, ctx))
+                lower_expr_with_context(expr, ctx, Some(type_id)).and_then(|lowered| {
+                    resolve_initializer_enum_variant(expr, lowered, type_id, ctx)
+                })
             })
             .transpose()?;
-        if qualifiers.constant && matches!(kind, VarBlockKind::Global) {
-            if let Some(expr) = init_expr.as_ref() {
-                let value = ctx.eval_compile_time_const_initializer(expr, type_id)?;
-                for name in &parts.names {
-                    let qualified = namespace_qualified_name(var_block, name.as_str());
-                    ctx.register_global_compile_time_const(qualified.as_str(), value.clone());
-                }
+        if qualifiers.constant
+            && matches!(kind, VarBlockKind::Global)
+            && let Some(expr) = init_expr.as_ref()
+        {
+            let value = ctx.eval_compile_time_const_initializer(expr, type_id)?;
+            for name in &parts.names {
+                let qualified = namespace_qualified_name(var_block, name.as_str());
+                ctx.register_global_compile_time_const(qualified.as_str(), value.clone());
             }
         }
         match kind {
             VarBlockKind::Global => {
                 for name in parts.names {
                     globals.push(GlobalInit {
+                        constant: qualifiers.constant,
                         name: namespace_qualified_name(var_block, name.as_str()),
                         type_id,
                         initializer: init_expr.clone(),
@@ -103,6 +106,7 @@ pub(super) fn lower_var_access_block(
         match &path {
             AccessPath::Direct { text, .. } => {
                 result.globals.push(GlobalInit {
+                    constant: false,
                     name: namespace_qualified_name(var_block, name.as_str()),
                     type_id,
                     initializer: None,
@@ -144,10 +148,11 @@ fn lower_var_config_block(
         let initializer = config_init
             .children()
             .find(|child| is_expression_kind(child.kind()))
-            .map(|expr| lower_expr(&expr, ctx))
+            .map(|expr| lower_expr_with_context(&expr, ctx, Some(type_id)))
             .transpose()?;
         let address = config_init_address(&config_init)?;
         inits.push(ConfigInit {
+            display_name: Some(super::super::config::access_path_display(&path)),
             path,
             address,
             type_id,

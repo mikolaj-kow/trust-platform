@@ -15,21 +15,19 @@ impl SymbolCollector<'_> {
                 .get_scope(current_scope)
                 .and_then(|scope| scope.lookup_local(name.as_str()));
 
-            if let Some(existing_id) = existing_local {
-                if let Some(existing_symbol) = self.table.get(existing_id) {
-                    if matches!(existing_symbol.kind, SymbolKind::Namespace) {
-                        let previous_scope = self.table.current_scope();
-                        let scope_id =
-                            self.table.scope_for_owner(existing_id).unwrap_or_else(|| {
-                                self.table
-                                    .push_scope(ScopeKind::Namespace, Some(existing_id))
-                            });
-                        self.table.set_current_scope(scope_id);
-                        self.parent_stack.push(existing_id);
-                        entries.push(NamespaceEntry::Reused { previous_scope });
-                        continue;
-                    }
-                }
+            if let Some(existing_id) = existing_local
+                && let Some(existing_symbol) = self.table.get(existing_id)
+                && matches!(existing_symbol.kind, SymbolKind::Namespace)
+            {
+                let previous_scope = self.table.current_scope();
+                let scope_id = self.table.scope_for_owner(existing_id).unwrap_or_else(|| {
+                    self.table
+                        .push_scope(ScopeKind::Namespace, Some(existing_id))
+                });
+                self.table.set_current_scope(scope_id);
+                self.parent_stack.push(existing_id);
+                entries.push(NamespaceEntry::Reused { previous_scope });
+                continue;
             }
 
             let mut symbol = Symbol::new(
@@ -64,6 +62,7 @@ impl SymbolCollector<'_> {
     pub(super) fn visit_node(&mut self, node: &SyntaxNode) {
         match node.kind() {
             SyntaxKind::Program => self.collect_pou(node, SymbolKind::Program, TypeId::VOID),
+            SyntaxKind::Action => self.collect_action(node),
             SyntaxKind::Configuration => self.collect_configuration(node),
             SyntaxKind::Resource => self.collect_resource(node),
             SyntaxKind::TaskConfig => self.collect_task_config(node),
@@ -260,6 +259,26 @@ impl SymbolCollector<'_> {
         self.table.pop_scope();
     }
 
+    /// CODESYS textual action (vendor extension): an invocable child symbol
+    /// of its owning program/function block. Actions live outside the
+    /// owning scope so a variable of the same name keeps shadowing them;
+    /// resolution goes through the POU child scan in call position. The
+    /// body itself is type-checked separately.
+    fn collect_action(&mut self, node: &SyntaxNode) {
+        let Some((name, range)) = name_from_node(node) else {
+            return;
+        };
+        let mut symbol = Symbol::new(
+            SymbolId::UNKNOWN,
+            name,
+            SymbolKind::Action,
+            TypeId::VOID,
+            range,
+        );
+        symbol.parent = self.current_parent();
+        self.table.add_symbol_raw(symbol);
+    }
+
     fn collect_configuration(&mut self, node: &SyntaxNode) {
         let Some((name, range)) = name_from_node(node) else {
             for child in node.children() {
@@ -391,8 +410,13 @@ impl SymbolCollector<'_> {
             return Visibility::Public;
         };
         match parent.kind {
-            SymbolKind::Class | SymbolKind::FunctionBlock => Visibility::Protected,
-            SymbolKind::Interface => Visibility::Public,
+            // Classes default to Protected (IEC 61131-3 Ed.3 object model).
+            // Function blocks default to Public: classic IEC reaches members
+            // through the instance name (`fbInstance.var`), and CODESYS
+            // projects rely on it — restriction is opt-in via
+            // VAR_PROTECTED/VAR_PRIVATE.
+            SymbolKind::Class => Visibility::Protected,
+            SymbolKind::Interface | SymbolKind::FunctionBlock => Visibility::Public,
             _ => Visibility::Public,
         }
     }
@@ -528,21 +552,19 @@ impl SymbolCollector<'_> {
                 });
             // Only report duplicate if it's in the same scope (not from parent)
             let current_scope = self.table.current_scope();
-            if !distinct_enum_values {
-                if let Some(scope) = self.table.get_scope(current_scope) {
-                    if scope.lookup_local(&name).is_some() {
-                        let mut diag = Diagnostic::error(
-                            DiagnosticCode::DuplicateDeclaration,
-                            range,
-                            format!("duplicate declaration of '{}'", name),
-                        );
-                        if let Some(existing_symbol) = self.table.get(existing) {
-                            diag = diag
-                                .with_related(existing_symbol.range, "previously declared here");
-                        }
-                        self.diagnostics.add(diag);
-                    }
+            if !distinct_enum_values
+                && let Some(scope) = self.table.get_scope(current_scope)
+                && scope.lookup_local(&name).is_some()
+            {
+                let mut diag = Diagnostic::error(
+                    DiagnosticCode::DuplicateDeclaration,
+                    range,
+                    format!("duplicate declaration of '{}'", name),
+                );
+                if let Some(existing_symbol) = self.table.get(existing) {
+                    diag = diag.with_related(existing_symbol.range, "previously declared here");
                 }
+                self.diagnostics.add(diag);
             }
         }
 

@@ -20,6 +20,7 @@ mod compatibility;
 mod const_eval;
 mod expr;
 mod helpers;
+mod literal_range;
 mod literals;
 mod ops;
 mod standard;
@@ -27,7 +28,8 @@ mod stmt;
 mod symbol_resolve;
 mod validation;
 
-pub(crate) use literals::string_literal_info;
+pub(crate) use literal_range::untyped_literal_out_of_range_message;
+pub(crate) use literals::{exact_int_literal_value, integer_type_range_fits, string_literal_info};
 pub use ops::{BinaryOp, UnaryOp};
 pub(crate) use standard::is_standard_function_name;
 
@@ -43,6 +45,7 @@ fn non_value_role(kind: &SymbolKind) -> Option<&'static str> {
         SymbolKind::Resource => Some("resource"),
         SymbolKind::Task => Some("task"),
         SymbolKind::ProgramInstance => Some("program instance"),
+        SymbolKind::Action => Some("action"),
         SymbolKind::Variable { .. }
         | SymbolKind::Constant
         | SymbolKind::EnumValue { .. }

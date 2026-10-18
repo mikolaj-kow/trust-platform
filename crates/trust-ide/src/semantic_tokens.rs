@@ -137,6 +137,7 @@ fn symbol_kind_to_token_type(kind: &SymbolKind) -> SemanticTokenType {
         SymbolKind::FunctionBlock => SemanticTokenType::Type,
         SymbolKind::Class => SemanticTokenType::Type,
         SymbolKind::Method { .. } => SemanticTokenType::Method,
+        SymbolKind::Action => SemanticTokenType::Method,
         SymbolKind::Property { .. } => SemanticTokenType::Property,
         SymbolKind::Interface => SemanticTokenType::Type,
         SymbolKind::Variable { .. } => SemanticTokenType::Variable,
@@ -296,10 +297,10 @@ fn collect_field_member_ranges(root: &SyntaxNode) -> FxHashSet<TextRange> {
         let Some(member) = children.next() else {
             continue;
         };
-        if matches!(member.kind(), SyntaxKind::Name | SyntaxKind::NameRef) {
-            if let Some(token) = ident_token_in_name(&member) {
-                ranges.insert(token.text_range());
-            }
+        if matches!(member.kind(), SyntaxKind::Name | SyntaxKind::NameRef)
+            && let Some(token) = ident_token_in_name(&member)
+        {
+            ranges.insert(token.text_range());
         }
     }
     ranges

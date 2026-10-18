@@ -83,77 +83,100 @@ impl<'a, 'b> CallChecker<'a, 'b> {
         let callee = &children[0];
 
         // If it's a name reference, look up the symbol
-        if callee.kind() == SyntaxKind::NameRef {
-            if let Some(name) = self.checker.resolve_ref().get_name_from_ref(callee) {
-                if name.eq_ignore_ascii_case("REF") {
-                    return self.infer_ref_call(node);
-                }
-                if name.eq_ignore_ascii_case("NEW") || name.eq_ignore_ascii_case("__NEW") {
-                    return self.infer_new_call(node);
-                }
-                if name.eq_ignore_ascii_case("__DELETE") {
-                    return self.infer_ref_delete_call(node);
-                }
-                if name.eq_ignore_ascii_case("TIME") {
-                    if let Some(result) = self
-                        .checker
-                        .standard()
-                        .infer_standard_function_call(&name, node)
-                    {
-                        return result;
-                    }
-                }
-                match self
+        if callee.kind() == SyntaxKind::NameRef
+            && let Some(name) = self.checker.resolve_ref().get_name_from_ref(callee)
+        {
+            if name.eq_ignore_ascii_case("REF") {
+                return self.infer_ref_call(node);
+            }
+            if name.eq_ignore_ascii_case("NEW") || name.eq_ignore_ascii_case("__NEW") {
+                return self.infer_new_call(node);
+            }
+            if name.eq_ignore_ascii_case("__DELETE") {
+                return self.infer_ref_delete_call(node);
+            }
+            if name.eq_ignore_ascii_case("TIME")
+                && let Some(result) = self
                     .checker
-                    .resolve()
-                    .resolve_name_in_context_outcome(&name, callee.text_range())
-                {
-                    NameResolveOutcome::Resolved(resolved) => {
-                        if !resolved.accessible {
-                            return self.checker.legacy_suppressed_type(
-                                DiagnosticCode::CannotResolve,
-                                callee.text_range(),
-                            );
-                        }
-                        let Some(call_target) =
-                            self.checker.resolve_ref().resolve_call_target(resolved.id)
-                        else {
-                            return self.checker.legacy_diagnostic_type(
-                                DiagnosticCode::UndefinedFunction,
-                                callee.text_range(),
-                                format!("'{}' is not callable", name),
-                            );
-                        };
-
-                        self.check_call_arguments(call_target.param_owner, &call_target.kind, node);
-                        return self.checked_call_result_type(node, &call_target);
-                    }
-                    NameResolveOutcome::Ambiguous => {
+                    .standard()
+                    .infer_standard_function_call(&name, node)
+            {
+                return result;
+            }
+            match self
+                .checker
+                .resolve()
+                .resolve_name_in_context_outcome(&name, callee.text_range())
+            {
+                NameResolveOutcome::Resolved(resolved) => {
+                    if !resolved.accessible {
                         return self.checker.legacy_suppressed_type(
                             DiagnosticCode::CannotResolve,
                             callee.text_range(),
                         );
                     }
-                    NameResolveOutcome::NotFound => {}
-                }
+                    let Some(call_target) =
+                        self.checker.resolve_ref().resolve_call_target(resolved.id)
+                    else {
+                        return self.checker.legacy_diagnostic_type(
+                            DiagnosticCode::UndefinedFunction,
+                            callee.text_range(),
+                            format!("'{}' is not callable", name),
+                        );
+                    };
 
-                if let Some(result) = self
-                    .checker
-                    .standard()
-                    .infer_standard_function_call(&name, node)
-                {
-                    return result;
+                    self.check_call_arguments(call_target.param_owner, &call_target.kind, node);
+                    return self.checked_call_result_type(node, &call_target);
                 }
-
-                return self.checker.legacy_diagnostic_type(
-                    DiagnosticCode::UndefinedFunction,
-                    callee.text_range(),
-                    format!("undefined function '{}'", name),
-                );
+                NameResolveOutcome::Ambiguous => {
+                    return self.checker.legacy_suppressed_type(
+                        DiagnosticCode::CannotResolve,
+                        callee.text_range(),
+                    );
+                }
+                NameResolveOutcome::NotFound => {}
             }
+
+            if let Some(result) = self
+                .checker
+                .standard()
+                .infer_standard_function_call(&name, node)
+            {
+                return result;
+            }
+
+            // CODESYS textual action call (vendor extension): an action
+            // of the enclosing POU is callable by its bare name.
+            if let Some(pou_id) = self.checker.current_pou_symbol
+                && let Some(action_id) = self.checker.symbols.resolve_child_symbol(pou_id, &name)
+                && matches!(
+                    self.checker.symbols.get(action_id).map(|s| &s.kind),
+                    Some(SymbolKind::Action)
+                )
+                && let Some(call_target) = self.checker.resolve_ref().resolve_call_target(action_id)
+            {
+                self.check_call_arguments(call_target.param_owner, &call_target.kind, node);
+                return self.checked_call_result_type(node, &call_target);
+            }
+
+            return self.checker.legacy_diagnostic_type(
+                DiagnosticCode::UndefinedFunction,
+                callee.text_range(),
+                format!("undefined function '{}'", name),
+            );
         }
 
         if callee.kind() == SyntaxKind::FieldExpr {
+            // CODESYS program-singleton access: `ProgramName.fbInst(...)`.
+            if let Some(member_id) = self
+                .checker
+                .resolve_ref()
+                .resolve_program_qualified_member(callee)
+                && let Some(call_target) = self.checker.resolve_ref().resolve_call_target(member_id)
+            {
+                self.check_call_arguments(call_target.param_owner, &call_target.kind, node);
+                return self.checked_call_result_type(node, &call_target);
+            }
             if let Some(symbol_id) = self
                 .checker
                 .resolve_ref()
@@ -175,31 +198,31 @@ impl<'a, 'b> CallChecker<'a, 'b> {
                 let base = &field_children[0];
                 let member = &field_children[1];
                 let base_type = self.checker.expr().check_expression(base);
-                if let Some(name) = self.checker.resolve_ref().get_name_from_ref(member) {
-                    if let Some(resolved) = self.checker.resolve().resolve_member_symbol_in_type(
+                if let Some(name) = self.checker.resolve_ref().get_name_from_ref(member)
+                    && let Some(resolved) = self.checker.resolve().resolve_member_symbol_in_type(
                         base_type,
                         &name,
                         member.text_range(),
-                    ) {
-                        if !resolved.accessible {
-                            return self.checker.legacy_suppressed_type(
-                                DiagnosticCode::CannotResolve,
-                                member.text_range(),
-                            );
-                        }
-                        let Some(call_target) =
-                            self.checker.resolve_ref().resolve_call_target(resolved.id)
-                        else {
-                            return self.checker.legacy_diagnostic_type(
-                                DiagnosticCode::UndefinedFunction,
-                                member.text_range(),
-                                format!("'{}' is not callable", name),
-                            );
-                        };
-
-                        self.check_call_arguments(call_target.param_owner, &call_target.kind, node);
-                        return self.checked_call_result_type(node, &call_target);
+                    )
+                {
+                    if !resolved.accessible {
+                        return self.checker.legacy_suppressed_type(
+                            DiagnosticCode::CannotResolve,
+                            member.text_range(),
+                        );
                     }
+                    let Some(call_target) =
+                        self.checker.resolve_ref().resolve_call_target(resolved.id)
+                    else {
+                        return self.checker.legacy_diagnostic_type(
+                            DiagnosticCode::UndefinedFunction,
+                            member.text_range(),
+                            format!("'{}' is not callable", name),
+                        );
+                    };
+
+                    self.check_call_arguments(call_target.param_owner, &call_target.kind, node);
+                    return self.checked_call_result_type(node, &call_target);
                 }
             }
 
@@ -259,14 +282,13 @@ impl<'a, 'b> CallChecker<'a, 'b> {
                 .symbols
                 .get(symbol_id)
                 .map(|symbol| (symbol.range.is_empty(), symbol.name.as_str().to_owned()));
-            if let Some((true, name)) = standard_fb {
-                if self
+            if let Some((true, name)) = standard_fb
+                && self
                     .checker
                     .standard()
                     .check_standard_function_block_call(&name, node)
-                {
-                    return;
-                }
+            {
+                return;
             }
         }
 

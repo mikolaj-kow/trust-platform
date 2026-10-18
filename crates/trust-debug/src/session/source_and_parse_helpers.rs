@@ -109,14 +109,11 @@ fn apply_project_io_config(
             resolved_drivers.push(resolved_driver);
             continue;
         }
-        if driver.name.eq_ignore_ascii_case("mqtt")
-            || driver.name.eq_ignore_ascii_case("mqtt-tcp")
+        if driver.name.eq_ignore_ascii_case("mqtt") || driver.name.eq_ignore_ascii_case("mqtt-tcp")
         {
-            resolved_driver.params = trust_runtime::io::resolve_mqtt_tag_mappings(
-                runtime,
-                &resolved_driver.params,
-            )
-            .map_err(|err| CompileError::new(format!("failed to load io.toml: {err}")))?;
+            resolved_driver.params =
+                trust_runtime::io::resolve_mqtt_tag_mappings(runtime, &resolved_driver.params)
+                    .map_err(|err| CompileError::new(format!("failed to load io.toml: {err}")))?;
         }
         if let Some(spec) = registry
             .build(resolved_driver.name.as_str(), &resolved_driver.params)
@@ -126,7 +123,7 @@ fn apply_project_io_config(
         }
         resolved_drivers.push(resolved_driver);
     }
-    trust_runtime::io::annotate_io_binding_sources(runtime.io_mut(), &resolved_drivers);
+    runtime.annotate_io_binding_sources(&resolved_drivers);
     Ok(())
 }
 
@@ -215,10 +212,10 @@ fn resolve_project_root_for_config(
     if parent.join("io.toml").is_file() || parent.join("runtime.toml").is_file() {
         return Ok(Some(parent.to_path_buf()));
     }
-    if let Some(project_root) = parent.parent() {
-        if project_root.join("io.toml").is_file() || project_root.join("runtime.toml").is_file() {
-            return Ok(Some(project_root.to_path_buf()));
-        }
+    if let Some(project_root) = parent.parent()
+        && (project_root.join("io.toml").is_file() || project_root.join("runtime.toml").is_file())
+    {
+        return Ok(Some(project_root.to_path_buf()));
     }
     Ok(None)
 }
@@ -506,11 +503,12 @@ fn parse_hit_condition(raw: &str) -> Option<HitCondition> {
     }
 }
 
-fn parse_log_message(
+fn parse_log_message_with_abi(
     template: &str,
     registry: &mut trust_hir::types::TypeRegistry,
     profile: trust_runtime::value::DateTimeProfile,
     using: &[smol_str::SmolStr],
+    storage_abi: trust_runtime::value::StorageAbi,
 ) -> Result<Vec<LogFragment>, String> {
     let mut fragments = Vec::new();
     let mut literal = String::new();
@@ -543,8 +541,14 @@ fn parse_log_message(
                 if expr.is_empty() {
                     return Err("empty log expression".to_string());
                 }
-                let compiled = parse_debug_expression(expr, registry, profile, using)
-                    .map_err(|err| err.to_string())?;
+                let compiled = trust_runtime::harness::parse_debug_expression_with_abi(
+                    expr,
+                    registry,
+                    profile,
+                    using,
+                    storage_abi,
+                )
+                .map_err(|err| err.to_string())?;
                 fragments.push(LogFragment::Expr(compiled));
             }
             '}' => {

@@ -13,6 +13,7 @@ impl DebugControl {
                     target_thread: None,
                     breakpoints: Vec::new(),
                     breakpoint_generation: HashMap::new(),
+                    watchdog_hold_started: None,
                     breakpoint_stops_this_cycle: HashSet::new(),
                     frame_locations: HashMap::new(),
                     logs: Vec::new(),
@@ -23,7 +24,8 @@ impl DebugControl {
                     io_tx: None,
                     stop_tx: None,
                     runtime_tx: None,
-                    runtime_events: Vec::new(),
+                    runtime_events: VecDeque::new(),
+                    runtime_events_dropped: 0,
                     pending_stop: None,
                     stops: Vec::new(),
                     last_stop: None,
@@ -44,6 +46,17 @@ impl DebugControl {
         std::time::Duration::from_nanos(self.watchdog_pause_nanos.load(Ordering::Relaxed))
     }
 
+    /// Whether the scan thread is waiting in a debugger hold right now, and the completed pause
+    /// total. Both are read under the state lock, which the hold updates, so the pair is consistent.
+    pub(crate) fn watchdog_hold_view(&self) -> (bool, std::time::Duration) {
+        let (lock, _) = &*self.state;
+        let state = lock.lock().expect("debug state poisoned");
+        (
+            state.watchdog_hold_started.is_some(),
+            self.watchdog_pause_elapsed(),
+        )
+    }
+
     pub(crate) fn begin_cycle(&self) {
         let (lock, _) = &*self.state;
         let mut state = lock.lock().expect("debug state poisoned");
@@ -52,11 +65,11 @@ impl DebugControl {
 
     pub(super) fn record_watchdog_pause(&self, elapsed: std::time::Duration) {
         let nanos = u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX);
-        let _ = self.watchdog_pause_nanos.fetch_update(
-            Ordering::Relaxed,
-            Ordering::Relaxed,
-            |current| Some(current.saturating_add(nanos)),
-        );
+        let _ =
+            self.watchdog_pause_nanos
+                .try_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+                    Some(current.saturating_add(nanos))
+                });
     }
 
     /// Apply a requested control action.
@@ -277,5 +290,4 @@ impl DebugControl {
     pub fn step_out_thread(&self, thread_id: u32) {
         let _ = self.apply_action(ControlAction::StepOut(Some(thread_id)));
     }
-
 }

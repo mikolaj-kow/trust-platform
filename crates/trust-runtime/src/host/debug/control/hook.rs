@@ -6,7 +6,7 @@ impl Default for DebugControl {
 
 impl DebugHook for DebugControl {
     fn on_statement(&mut self, location: Option<&SourceLocation>, call_depth: u32) {
-        self.on_statement_inner(location, call_depth, None);
+        self.on_statement_inner(location, call_depth, None, StatementSnapshot::Borrowed);
     }
 
     fn on_statement_with_context(
@@ -15,16 +15,28 @@ impl DebugHook for DebugControl {
         location: Option<&SourceLocation>,
         call_depth: u32,
     ) {
-        self.on_statement_inner(location, call_depth, Some(ctx));
+        self.on_statement_inner(location, call_depth, Some(ctx), StatementSnapshot::Borrowed);
     }
 }
 
 impl DebugControl {
+    /// Publish an already detached execution projection without cloning its
+    /// storage again. The caller relinquishes the projection at this boundary.
+    pub(crate) fn on_statement_with_owned_context(
+        &mut self,
+        ctx: &mut DebugRuntimeContext<'_>,
+        location: Option<&SourceLocation>,
+        call_depth: u32,
+    ) {
+        self.on_statement_inner(location, call_depth, Some(ctx), StatementSnapshot::Detached);
+    }
+
     fn on_statement_inner(
         &mut self,
         location: Option<&SourceLocation>,
         call_depth: u32,
         mut ctx: Option<&mut DebugRuntimeContext<'_>>,
+        mut snapshot: StatementSnapshot,
     ) {
         let (lock, cvar) = &*self.state;
         let mut state = lock.lock().expect("debug state poisoned");
@@ -53,21 +65,26 @@ impl DebugControl {
                 state.frame_locations.insert(frame.id, *location);
             }
         }
+        if matches!(snapshot, StatementSnapshot::Detached)
+            && let Some(eval_ctx) = ctx.as_mut()
+        {
+            update_watch_snapshot(&mut state, eval_ctx);
+        }
         let is_target_thread =
             state.target_thread.is_none() || state.target_thread == state.current_thread;
-        if matches!(state.mode, DebugMode::Paused) && is_target_thread {
-            if let Some(reason) = state.pending_stop.take() {
-                trace_debug(&format!(
-                    "hook.pending_stop.consume reason={reason:?} location={} thread={:?}",
-                    format_location_ref(location),
-                    state.current_thread
-                ));
-                if let Some(eval_ctx) = ctx.as_mut() {
-                    update_watch_snapshot(&mut state, eval_ctx);
-                    update_snapshot(&mut state, eval_ctx);
-                }
-                emit_stop(&mut state, reason, location.copied(), None);
+        if matches!(state.mode, DebugMode::Paused)
+            && is_target_thread
+            && let Some(reason) = state.pending_stop.take()
+        {
+            trace_debug(&format!(
+                "hook.pending_stop.consume reason={reason:?} location={} thread={:?}",
+                format_location_ref(location),
+                state.current_thread
+            ));
+            if let Some(eval_ctx) = ctx.as_mut() {
+                snapshot.publish(&mut state, eval_ctx);
             }
+            emit_stop(&mut state, reason, location.copied(), None);
         }
         let effective_mode = if is_target_thread {
             state.mode
@@ -88,28 +105,28 @@ impl DebugControl {
                     .current_thread
                     .filter(|id| state.steps.contains_key(id))
                     .or_else(|| state.steps.contains_key(&0).then_some(0));
-                if let Some(step_key) = step_key {
-                    if let Some(step) = state.steps.get_mut(&step_key) {
-                        if !step.started {
-                            step.started = true;
-                            trace_debug(&format!(
-                                "hook.step.arm key={} kind={:?} target_depth={} current_depth={}",
-                                step_key, step.kind, step.target_depth, call_depth
-                            ));
-                        } else {
-                            should_pause = match step.kind {
-                                StepKind::Into => true,
-                                StepKind::Over => call_depth <= step.target_depth,
-                                StepKind::Out => call_depth <= step.target_depth,
-                            };
-                            trace_debug(&format!(
-                                "hook.step.check key={} kind={:?} target_depth={} current_depth={} should_pause={}",
-                                step_key, step.kind, step.target_depth, call_depth, should_pause
-                            ));
-                            if should_pause {
-                                state.steps.remove(&step_key);
-                                stop_reason = Some(DebugStopReason::Step);
-                            }
+                if let Some(step_key) = step_key
+                    && let Some(step) = state.steps.get_mut(&step_key)
+                {
+                    if !step.started {
+                        step.started = true;
+                        trace_debug(&format!(
+                            "hook.step.arm key={} kind={:?} target_depth={} current_depth={}",
+                            step_key, step.kind, step.target_depth, call_depth
+                        ));
+                    } else {
+                        should_pause = match step.kind {
+                            StepKind::Into => true,
+                            StepKind::Over => call_depth <= step.target_depth,
+                            StepKind::Out => call_depth <= step.target_depth,
+                        };
+                        trace_debug(&format!(
+                        "hook.step.check key={} kind={:?} target_depth={} current_depth={} should_pause={}",
+                        step_key, step.kind, step.target_depth, call_depth, should_pause
+                    ));
+                        if should_pause {
+                            state.steps.remove(&step_key);
+                            stop_reason = Some(DebugStopReason::Step);
                         }
                     }
                 }
@@ -157,29 +174,35 @@ impl DebugControl {
                         state.current_thread
                     ));
                     if let Some(eval_ctx) = ctx.as_mut() {
-                        update_watch_snapshot(&mut state, eval_ctx);
-                        update_snapshot(&mut state, eval_ctx);
+                        snapshot.publish(&mut state, eval_ctx);
                     }
                     emit_stop(&mut state, reason, Some(*location), stop_generation);
                 }
             }
         }
+        // Normal running statements also refresh the detached watch projection.
+        // Conditions and frame locations above still read its original storage.
+        if matches!(snapshot, StatementSnapshot::Detached)
+            && let Some(eval_ctx) = ctx.as_mut()
+        {
+            snapshot.publish(&mut state, eval_ctx);
+        }
         loop {
             let is_target_thread =
                 state.target_thread.is_none() || state.target_thread == state.current_thread;
-            if matches!(state.mode, DebugMode::Paused) && is_target_thread {
-                if let Some(reason) = state.pending_stop.take() {
-                    trace_debug(&format!(
-                        "hook.pending_stop.consume reason={reason:?} location={} thread={:?}",
-                        format_location_ref(location),
-                        state.current_thread
-                    ));
-                    if let Some(eval_ctx) = ctx.as_mut() {
-                        update_watch_snapshot(&mut state, eval_ctx);
-                        update_snapshot(&mut state, eval_ctx);
-                    }
-                    emit_stop(&mut state, reason, location.copied(), None);
+            if matches!(state.mode, DebugMode::Paused)
+                && is_target_thread
+                && let Some(reason) = state.pending_stop.take()
+            {
+                trace_debug(&format!(
+                    "hook.pending_stop.consume reason={reason:?} location={} thread={:?}",
+                    format_location_ref(location),
+                    state.current_thread
+                ));
+                if let Some(eval_ctx) = ctx.as_mut() {
+                    snapshot.publish(&mut state, eval_ctx);
                 }
+                emit_stop(&mut state, reason, location.copied(), None);
             }
             match state.mode {
                 DebugMode::Running => {
@@ -207,8 +230,10 @@ impl DebugControl {
                         state.target_thread
                     ));
                     let wait_started = std::time::Instant::now();
+                    state.watchdog_hold_started = Some(wait_started);
                     state = cvar.wait(state).expect("debug state poisoned");
                     self.record_watchdog_pause(wait_started.elapsed());
+                    state.watchdog_hold_started = None;
                     trace_debug(&format!(
                         "hook.wake mode={:?} location={} current_thread={:?} target_thread={:?}",
                         state.mode,
@@ -218,6 +243,32 @@ impl DebugControl {
                     ));
                 }
             }
+        }
+    }
+}
+
+enum StatementSnapshot {
+    Borrowed,
+    Detached,
+    Published,
+}
+
+impl StatementSnapshot {
+    fn publish(&mut self, state: &mut DebugState, ctx: &mut DebugRuntimeContext<'_>) {
+        match self {
+            Self::Borrowed => {
+                update_watch_snapshot(state, ctx);
+                update_snapshot(state, ctx);
+            }
+            Self::Detached => {
+                state.snapshot = Some(DebugSnapshot {
+                    storage_abi: ctx.storage_abi,
+                    storage: std::mem::take(ctx.storage),
+                    now: ctx.now,
+                });
+                *self = Self::Published;
+            }
+            Self::Published => {}
         }
     }
 }
@@ -244,10 +295,10 @@ fn emit_stop(
         thread_id: state.current_thread,
         breakpoint_generation,
     };
-    if let Some(sender) = &state.stop_tx {
-        if sender.send(stop.clone()).is_err() {
-            trace_debug("stop sender closed; retaining stop in debug control buffer");
-        }
+    if let Some(sender) = &state.stop_tx
+        && sender.send(stop.clone()).is_err()
+    {
+        trace_debug("stop sender closed; retaining stop in debug control buffer");
     }
     state.last_stop = Some(stop.clone());
     state.stops.push(stop);
@@ -256,9 +307,10 @@ fn emit_stop(
 fn update_watch_snapshot(state: &mut DebugState, ctx: &mut DebugRuntimeContext<'_>) {
     let mut changed = false;
     for watch in &mut state.watches {
-        let next = crate::helper_eval::eval_storage_expr_with_stdlib(
+        let next = crate::helper_eval::eval_storage_expr_with_abi(
             ctx.storage,
-            ctx.registry,
+            watch.registry.as_deref().unwrap_or(ctx.registry),
+            ctx.storage_abi,
             &ctx.profile,
             ctx.current_instance,
             ctx.stdlib,
@@ -277,6 +329,7 @@ fn update_watch_snapshot(state: &mut DebugState, ctx: &mut DebugRuntimeContext<'
 
 fn update_snapshot(state: &mut DebugState, ctx: &mut DebugRuntimeContext<'_>) {
     state.snapshot = Some(DebugSnapshot {
+        storage_abi: ctx.storage_abi,
         storage: ctx.storage.clone(),
         now: ctx.now,
     });

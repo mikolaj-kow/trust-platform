@@ -13,10 +13,10 @@ impl<'a> TypeChecker<'a> {
     }
 
     pub(super) fn is_valid_lvalue(&self, node: &SyntaxNode) -> bool {
-        if node.kind() == SyntaxKind::ParenExpr {
-            if let Some(inner) = node.children().next() {
-                return self.is_valid_lvalue(&inner);
-            }
+        if node.kind() == SyntaxKind::ParenExpr
+            && let Some(inner) = node.children().next()
+        {
+            return self.is_valid_lvalue(&inner);
         }
         match node.kind() {
             SyntaxKind::NameRef | SyntaxKind::DerefExpr => true,
@@ -42,10 +42,10 @@ impl<'a> TypeChecker<'a> {
         node: &SyntaxNode,
         resolved: Option<&ResolvedSymbol>,
     ) -> bool {
-        if node.kind() == SyntaxKind::ParenExpr {
-            if let Some(inner) = node.children().next() {
-                return self.is_constant_target_with_resolved(&inner, None);
-            }
+        if node.kind() == SyntaxKind::ParenExpr
+            && let Some(inner) = node.children().next()
+        {
+            return self.is_constant_target_with_resolved(&inner, None);
         }
 
         if node.kind() == SyntaxKind::FieldExpr {
@@ -86,17 +86,16 @@ impl<'a> TypeChecker<'a> {
                 }
             }
 
-            if let Some(name) = self.resolve_ref().get_name_from_ref(node) {
-                if let NameResolveOutcome::Resolved(resolved) = self
+            if let Some(name) = self.resolve_ref().get_name_from_ref(node)
+                && let NameResolveOutcome::Resolved(resolved) = self
                     .resolve()
                     .resolve_name_in_context_outcome(&name, node.text_range())
-                {
-                    if !resolved.accessible {
-                        return false;
-                    }
-                    if let Some(symbol) = self.symbols.get(resolved.id) {
-                        return self.symbol_is_constant(symbol);
-                    }
+            {
+                if !resolved.accessible {
+                    return false;
+                }
+                if let Some(symbol) = self.symbols.get(resolved.id) {
+                    return self.symbol_is_constant(symbol);
                 }
             }
         }
@@ -170,12 +169,35 @@ impl<'a> TypeChecker<'a> {
             SymbolKind::Parameter {
                 direction: ParamDirection::In,
             } => {
-                self.diagnostics.error(
-                    DiagnosticCode::InvalidAssignmentTarget,
-                    node.text_range(),
-                    format!("cannot assign to input parameter '{}'", symbol.name),
+                // CODESYS parity (vendor extension): VAR_INPUT members of a
+                // FUNCTION_BLOCK or PROGRAM are writable between calls and
+                // by the owning body. Function/method parameters are
+                // call-local, and pointer/reference input slots stay
+                // read-only per the truST indirect-write policy (spec
+                // 02-data-types section 4.4).
+                let owner_kind = symbol
+                    .parent
+                    .and_then(|id| self.symbols.get(id))
+                    .map(|owner| owner.kind.clone());
+                let is_instance_member = matches!(
+                    owner_kind,
+                    Some(SymbolKind::FunctionBlock) | Some(SymbolKind::Program)
                 );
-                false
+                let slot_type = self.symbols.resolve_alias_type(symbol.type_id);
+                let is_indirect_slot = matches!(
+                    self.symbols.type_by_id(slot_type),
+                    Some(Type::Pointer { .. } | Type::Reference { .. })
+                );
+                if is_instance_member && !is_indirect_slot {
+                    true
+                } else {
+                    self.diagnostics.error(
+                        DiagnosticCode::InvalidAssignmentTarget,
+                        node.text_range(),
+                        format!("cannot assign to input parameter '{}'", symbol.name),
+                    );
+                    false
+                }
             }
             SymbolKind::Property { has_set, .. } => {
                 if has_set {
@@ -221,6 +243,29 @@ impl<'a> TypeChecker<'a> {
                 }
             }
             SyntaxKind::FieldExpr => {
+                // Writes through an input-parameter slot stay rejected
+                // (spec 02 section 4.4 indirect-write policy): with FB
+                // members public, `FbIn.Field := x` must still fail even
+                // though `Field` itself resolves.
+                if self.assignment_walks_through_input_parameter(node) {
+                    self.diagnostics.error(
+                        DiagnosticCode::InvalidAssignmentTarget,
+                        node.text_range(),
+                        "cannot assign through an input parameter",
+                    );
+                    return None;
+                }
+                // CODESYS program-singleton access keeps target resolution
+                // (and with it the assignability checks) working.
+                if let Some(member_id) = self.resolve_ref().resolve_program_qualified_member(node) {
+                    let accessible = self
+                        .resolve()
+                        .check_member_access(member_id, node.text_range());
+                    return Some(ResolvedSymbol {
+                        id: member_id,
+                        accessible,
+                    });
+                }
                 if let Some(symbol_id) = self.resolve_ref().resolve_namespace_qualified_symbol(node)
                 {
                     let accessible = self
@@ -236,6 +281,9 @@ impl<'a> TypeChecker<'a> {
                     return None;
                 }
                 let base_type = self.expr().check_expression(&children[0]);
+                // Reference auto-deref keeps target resolution (and with it
+                // accessibility/constant checks) working through references.
+                let base_type = self.deref_reference_type(base_type);
                 let Some(field_name) = self.resolve_ref().get_name_from_ref(&children[1]) else {
                     return self.resolve().resolve_lvalue_root(node);
                 };
@@ -254,6 +302,47 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
+    /// True when the field-expression chain of an assignment target passes
+    /// through an input-parameter slot (`FbIn.Field` where `FbIn` is
+    /// `VAR_INPUT`).
+    fn assignment_walks_through_input_parameter(&mut self, node: &SyntaxNode) -> bool {
+        let mut current = Some(node.clone());
+        while let Some(expr) = current {
+            if expr.kind() != SyntaxKind::FieldExpr {
+                return false;
+            }
+            let mut children = expr.children();
+            let base = match children.next() {
+                Some(base) => base,
+                None => return false,
+            };
+            if base.kind() == SyntaxKind::FieldExpr {
+                current = Some(base);
+                continue;
+            }
+            // Only a plain dotted path (`FbIn.Field`) counts; deref, index,
+            // and call chains are the documented pointer write-through forms.
+            if base.kind() != SyntaxKind::NameRef {
+                return false;
+            }
+            let Some(name) = self.resolve_ref().get_name_from_ref(&base) else {
+                return false;
+            };
+            return matches!(
+                self.resolve()
+                    .resolve_name_in_context_outcome(&name, base.text_range()),
+                NameResolveOutcome::Resolved(resolved)
+                    if matches!(
+                        self.symbols.get(resolved.id).map(|symbol| &symbol.kind),
+                        Some(SymbolKind::Parameter {
+                            direction: ParamDirection::In
+                        })
+                    )
+            );
+        }
+        false
+    }
+
     pub(super) fn type_of_assignment_target(
         &mut self,
         node: &SyntaxNode,
@@ -262,12 +351,11 @@ impl<'a> TypeChecker<'a> {
         if self.is_return_target(node) {
             return self.current_function_return.unwrap_or(TypeId::VOID);
         }
-        if let Some(resolved) = resolved {
-            if let Some(symbol) = self.symbols.get(resolved.id) {
-                if matches!(symbol.kind, SymbolKind::Property { .. }) {
-                    return symbol.type_id;
-                }
-            }
+        if let Some(resolved) = resolved
+            && let Some(symbol) = self.symbols.get(resolved.id)
+            && matches!(symbol.kind, SymbolKind::Property { .. })
+        {
+            return symbol.type_id;
         }
         self.expr().check_expression(node)
     }
@@ -279,23 +367,23 @@ impl<'a> TypeChecker<'a> {
         let Some(current_id) = self.current_pou_symbol else {
             return false;
         };
-        if node.kind() == SyntaxKind::ParenExpr {
-            if let Some(inner) = node.children().next() {
-                return self.is_return_target(&inner);
-            }
+        if node.kind() == SyntaxKind::ParenExpr
+            && let Some(inner) = node.children().next()
+        {
+            return self.is_return_target(&inner);
         }
-        if node.kind() == SyntaxKind::NameRef {
-            if let Some(name) = self.resolve_ref().get_name_from_ref(node) {
-                if self
-                    .symbols
-                    .get(current_id)
-                    .is_some_and(|symbol| symbol.name.eq_ignore_ascii_case(name.as_str()))
-                {
-                    return true;
-                }
-                if let Some(symbol_id) = self.symbols.resolve(&name, self.current_scope) {
-                    return symbol_id == current_id;
-                }
+        if node.kind() == SyntaxKind::NameRef
+            && let Some(name) = self.resolve_ref().get_name_from_ref(node)
+        {
+            if self
+                .symbols
+                .get(current_id)
+                .is_some_and(|symbol| symbol.name.eq_ignore_ascii_case(name.as_str()))
+            {
+                return true;
+            }
+            if let Some(symbol_id) = self.symbols.resolve(&name, self.current_scope) {
+                return symbol_id == current_id;
             }
         }
         false

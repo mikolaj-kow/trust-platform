@@ -23,9 +23,10 @@ fn register_ir_lowering_handles_function_block_self_fields_without_fallback() {
         "#;
 
     let bytecode = bytecode_module_from_source(source).expect("compile bytecode");
-    let vm_module = VmModule::from_bytecode(&bytecode).expect("decode vm module");
+    let vm_module =
+        crate::runtime::vm::materialize_test_module(&bytecode).expect("decode vm module");
     let fb_pou_id = vm_module
-        .function_block_ids
+        .function_block_ids()
         .get(&SmolStr::new("COUNTER"))
         .copied()
         .expect("counter pou id");
@@ -55,9 +56,10 @@ fn tier1_compiler_accepts_function_block_self_field_dynamic_ops() {
         "#;
 
     let bytecode = bytecode_module_from_source(source).expect("compile bytecode");
-    let vm_module = VmModule::from_bytecode(&bytecode).expect("decode vm module");
+    let vm_module =
+        crate::runtime::vm::materialize_test_module(&bytecode).expect("decode vm module");
     let fb_pou_id = vm_module
-        .function_block_ids
+        .function_block_ids()
         .get(&SmolStr::new("COUNTER"))
         .copied()
         .expect("counter pou id");
@@ -74,9 +76,8 @@ fn tier1_compiler_accepts_function_block_self_field_dynamic_ops() {
             })
         })
         .expect("function block fused self-field dynamic block");
-    let key = super::tier1_block_key(&vm_module, fb_pou_id, block);
     assert!(
-        super::compile_tier1_block(&vm_module, block, key).is_ok(),
+        super::compile_tier1_block(&vm_module, block).is_ok(),
         "expected tier-1 compiler to accept self-field dynamic block: {:?}",
         block.instructions
     );
@@ -103,9 +104,10 @@ fn register_ir_lowering_fuses_self_field_dynamic_load_store() {
         "#;
 
     let bytecode = bytecode_module_from_source(source).expect("compile bytecode");
-    let vm_module = VmModule::from_bytecode(&bytecode).expect("decode vm module");
+    let vm_module =
+        crate::runtime::vm::materialize_test_module(&bytecode).expect("decode vm module");
     let fb_pou_id = vm_module
-        .function_block_ids
+        .function_block_ids()
         .get(&SmolStr::new("COUNTER"))
         .copied()
         .expect("counter pou id");
@@ -162,9 +164,10 @@ fn tier1_compiler_accepts_function_block_index_dynamic_ops() {
         "#;
 
     let bytecode = bytecode_module_from_source(source).expect("compile bytecode");
-    let vm_module = VmModule::from_bytecode(&bytecode).expect("decode vm module");
+    let vm_module =
+        crate::runtime::vm::materialize_test_module(&bytecode).expect("decode vm module");
     let fb_pou_id = vm_module
-        .function_block_ids
+        .function_block_ids()
         .get(&SmolStr::new("COUNTERARRAY"))
         .copied()
         .expect("counterarray pou id");
@@ -188,9 +191,8 @@ fn tier1_compiler_accepts_function_block_index_dynamic_ops() {
                     .any(|instruction| matches!(instruction, RegisterInstr::StoreDynamic { .. }))
         })
         .expect("function block ref-index/dynamic block");
-    let key = super::tier1_block_key(&vm_module, fb_pou_id, block);
     assert!(
-        super::compile_tier1_block(&vm_module, block, key).is_ok(),
+        super::compile_tier1_block(&vm_module, block).is_ok(),
         "expected tier-1 compiler to accept index dynamic block: {:?}",
         block.instructions
     );
@@ -280,6 +282,7 @@ fn register_executor_runs_program_with_complex_local_fields_without_fallback() {
     pou_by_id.insert(
         pou_id,
         VmPouEntry {
+            kind: crate::bytecode::PouKind::Function,
             name: SmolStr::new("MAIN"),
             code_start: 0,
             code_end: code.len(),
@@ -306,26 +309,28 @@ fn register_executor_runs_program_with_complex_local_fields_without_fallback() {
             path: RefPath::new(),
         },
     ];
-    let module = VmModule {
-        code,
-        strings: Vec::new(),
-        types: TypeTable::default(),
-        refs,
-        consts: vec![Value::DInt(7)],
-        pou_by_id,
-        program_ids,
-        function_ids: HashMap::new(),
-        function_block_ids: HashMap::new(),
-        class_ids: HashMap::new(),
-        parent_pou_ids: HashMap::new(),
-        interface_type_ids_by_pou: HashMap::new(),
-        native_symbol_specs: Vec::new(),
-        pou_params: HashMap::new(),
-        pou_has_return_slot: HashSet::new(),
-        method_table_by_owner: HashMap::new(),
-        ref_types: HashMap::new(),
-        debug_map: super::super::debug_map::VmDebugMap::default(),
-        instruction_budget: super::super::DEFAULT_INSTRUCTION_BUDGET,
+    let module = {
+        let mut legacy = VmModule::legacy(
+            crate::bytecode::BytecodeVersion::LEGACY,
+            code,
+            Vec::new(),
+            TypeTable::default(),
+            refs,
+            vec![Value::DInt(7)],
+        )
+        .expect("legacy fixture metadata");
+        let mut entries = pou_by_id;
+        for (_, id) in program_ids {
+            legacy.define_legacy_pou(
+                id,
+                crate::bytecode::PouKind::Program,
+                entries.remove(&id).expect("fixture POU"),
+                Vec::new(),
+                false,
+            );
+        }
+        legacy.set_legacy_instruction_budget(super::super::DEFAULT_INSTRUCTION_BUDGET);
+        legacy
     };
     let initial_outer = Value::Struct(std::sync::Arc::new(StructValue::from_untyped_parts(
         SmolStr::new("OUTER_T"),
@@ -342,6 +347,8 @@ fn register_executor_runs_program_with_complex_local_fields_without_fallback() {
     runtime.set_vm_register_profile_enabled(true);
     runtime.reset_vm_register_profile();
 
+    let mut runtime = LegacyRegisterFixtureContext::new(&mut runtime, &module)
+        .expect("prepare legacy register fixture");
     let outcome = try_execute_pou_with_register_ir_with_locals(
         &mut runtime,
         &module,
@@ -350,7 +357,7 @@ fn register_executor_runs_program_with_complex_local_fields_without_fallback() {
         Some(&[initial_outer]),
         false,
         0,
-        None,
+        trust_runtime_core::vm::hosted::budget::ExecutionEntry::Root,
     )
     .expect("execute register program");
     assert!(
@@ -379,6 +386,8 @@ fn register_lowering_error_fallback_reason_includes_pou_name_and_message() {
     runtime.set_vm_register_profile_enabled(true);
     runtime.reset_vm_register_profile();
 
+    let mut runtime = LegacyRegisterFixtureContext::new(&mut runtime, &module)
+        .expect("prepare legacy register fixture");
     let outcome = try_execute_pou_with_register_ir(&mut runtime, &module, pou_id, None)
         .expect("fallback decision");
     assert_eq!(outcome, RegisterExecutionOutcome::FallbackToStack);
