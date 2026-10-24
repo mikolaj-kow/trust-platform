@@ -6,6 +6,14 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+- FUNCTION_BLOCK `EXTENDS` resolves inherited members (CODESYS FB
+  inheritance): a derived block sees the base block's members across all
+  variable sections and its methods, transitively through the chain and
+  across files; a redeclared name shadows the base declaration. Call sites
+  accept inherited `VAR_INPUT`/`VAR_OUTPUT`/`VAR_IN_OUT` members as
+  parameters (own parameters before inherited ones for positional calls),
+  and the runtime binds inherited named, omitted and output arguments like
+  own ones.
 - Declaration sizes gain the CODESYS vendor leniency recorded in
   IEC_DEVIATIONS 2026-10-21: a `STRING`/`WSTRING` capacity or an array
   dimension bound may name a plain initializer-backed variable, including

@@ -817,7 +817,7 @@ impl SymbolTable {
 
     /// Returns the base type name for a symbol, if any.
     #[must_use]
-    pub(crate) fn extends_name(&self, owner: SymbolId) -> Option<&SmolStr> {
+    pub fn extends_name(&self, owner: SymbolId) -> Option<&SmolStr> {
         self.extends.get(&owner).map(|reference| &reference.name)
     }
 

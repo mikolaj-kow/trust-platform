@@ -299,13 +299,23 @@ END_FUNCTION_BLOCK
 2. **Instantiation required**: Must be declared as instance to use
 3. **Instance isolation**: Each instance has independent state
 4. **Can contain methods**: OOP-style methods allowed
-5. **Can inherit**: Using EXTENDS (if supported)
+5. **Can inherit**: `EXTENDS` derives the block from a base block or class
+   (CODESYS parity, vendor extension; single inheritance)
 6. **EXTENDS targets**: Function blocks may EXTENDS a FUNCTION_BLOCK or CLASS; extending an INTERFACE is invalid (Table 40, IEC 61131-3 Ed.3 §6.6.3.4)
-7. **Can implement interfaces**: A function block declaration may use
+7. **Inherited member resolution** (CODESYS parity, vendor extension): a
+   derived block sees the base block's members across all variable sections
+   (`VAR`, `VAR_INPUT`, `VAR_OUTPUT`, `VAR_IN_OUT`, `VAR_TEMP`, `VAR_STAT`)
+   and its methods, resolved transitively through the `EXTENDS` chain and
+   across files. A name redeclared by the derived block shadows the base
+   declaration (static name-level override). Call sites accept the inherited
+   `VAR_INPUT`/`VAR_OUTPUT`/`VAR_IN_OUT` members as parameters; positional
+   calls bind the block's own parameters first, then the inherited ones in
+   nearest-base order.
+8. **Can implement interfaces**: A function block declaration may use
    `IMPLEMENTS` with one or more interface names; the parser preserves the
    complete ordered interface list for semantic validation (IEC 61131-3 Ed.3
    §6.6.7.1, Table 52).
-8. **VAR_INPUT members are writable** (CODESYS parity, vendor extension): the
+9. **VAR_INPUT members are writable** (CODESYS parity, vendor extension): the
    owning body and external POUs may assign a function-block or program
    `VAR_INPUT` member between calls (`fbInst.input := value`), matching the
    IEC input-transfer model where input values are set by the caller.
@@ -314,7 +324,7 @@ END_FUNCTION_BLOCK
    policy (`02-data-types.md` section 4.4). Assignments through an
    input-parameter slot (`fbInput.field := value` where `fbInput` is a
    `VAR_INPUT` function-block instance) remain rejected.
-9. **Members default to Public** (classic IEC instance access): plain `VAR`,
+10. **Members default to Public** (classic IEC instance access): plain `VAR`,
    `VAR_STAT`, methods, and properties of a function block are reachable
    through the instance name from outside (`fbInst.member`), matching the
    IEC function-block model where instance state is externally readable and
