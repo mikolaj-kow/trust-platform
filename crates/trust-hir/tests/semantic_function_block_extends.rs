@@ -301,6 +301,35 @@ END_PROGRAM
 }
 
 #[test]
+fn inherited_member_as_array_index_stays_resolvable() {
+    check_no_errors(
+        r#"
+VAR_GLOBAL
+    a : ARRAY[0..3] OF UINT;
+END_VAR
+
+FUNCTION_BLOCK BaseFB
+VAR_INPUT uiEntityIdx : UINT; END_VAR
+END_FUNCTION_BLOCK
+
+FUNCTION_BLOCK ChildFB EXTENDS BaseFB
+VAR
+    uiKelvin : UINT := 3000;
+END_VAR
+    IF (a[uiEntityIdx] >= UINT#1) THEN
+        uiKelvin := a[uiEntityIdx];
+    END_IF
+END_FUNCTION_BLOCK
+
+PROGRAM Main
+VAR c : ChildFB; END_VAR
+    c();
+END_PROGRAM
+"#,
+    );
+}
+
+#[test]
 fn self_extending_base_chain_terminates() {
     let source = r#"
 FUNCTION_BLOCK LoopFB EXTENDS LoopFB
