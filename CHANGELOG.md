@@ -14,6 +14,12 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
   parameters (own parameters before inherited ones for positional calls),
   and the runtime binds inherited named, omitted and output arguments like
   own ones.
+- Interface and abstract-method conformance diagnostics move from `E202` to
+  the new dedicated code `E208` ("must implement method/property", signature
+  and visibility mismatches, missing abstract implementations). Type-used-
+  as-value, access-specifier and initializer-constraint diagnostics keep
+  `E202`, so per-code severity overrides no longer mask interface
+  completeness regressions.
 - Declaration sizes gain the CODESYS vendor leniency recorded in
   IEC_DEVIATIONS 2026-10-21: a `STRING`/`WSTRING` capacity or an array
   dimension bound may name a plain initializer-backed variable, including
