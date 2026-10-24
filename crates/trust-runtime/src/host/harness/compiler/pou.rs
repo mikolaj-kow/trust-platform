@@ -33,3 +33,6 @@ include!("pou/program_vars.rs");
 include!("pou/function_vars.rs");
 include!("pou/class_vars.rs");
 include!("pou/function_block_vars.rs");
+// Kept last: the file ends in a #[cfg(test)] module, and include! splices
+// everything that follows after it.
+include!("pou/inherited_params.rs");

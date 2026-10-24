@@ -2260,6 +2260,13 @@ is also the single target of one output or in-out. These implementer-specific ru
 recorded in
 [`IEC_DECISIONS.md`](https://github.com/johannesPettersson80/trust-platform/blob/main/docs/IEC_DECISIONS.md#2026-07-30---pou-call-evaluation-execution-control-and-output-transfer).
 
+For a derived function block (CODESYS FB inheritance), the declaration-order
+parameter metadata of step 1 is the block's own parameters followed by the
+base block's, transitively through the `EXTENDS` chain; a name the block or a
+nearer base redeclares shadows the base declaration. Connected and omitted
+inherited parameters follow the same steps as own parameters, including the
+stored-instance fallback of step 4.
+
 #### 7.6 Host-stage POU evaluation contract
 
 The test-only host evaluator retains a stage-accurate compatibility contract

@@ -181,6 +181,10 @@ impl RuntimeBuilder {
         &self.functions
     }
 
+    pub(crate) fn function_blocks_mut(&mut self) -> &mut IndexMap<SmolStr, FunctionBlockDef> {
+        &mut self.function_blocks
+    }
+
     /// Register a global declaration, including its initializer and optional I/O address.
     /// This does not evaluate the initializer or create live PLC storage.
     pub fn register_global(
