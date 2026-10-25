@@ -296,7 +296,8 @@ impl<'a, 'b> CallChecker<'a, 'b> {
         }
 
         let params = self.callable_parameters(symbol_id, kind);
-        let bound = self.bind_call_arguments(&params, node);
+        let bound = self
+            .bind_call_arguments(&params, node, !matches!(kind, SymbolKind::FunctionBlock));
         self.check_bound_call_argument_types(&params, &bound);
         self.check_writable_argument_aliases(&params, &bound);
     }

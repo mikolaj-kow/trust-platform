@@ -2260,6 +2260,12 @@ is also the single target of one output or in-out. These implementer-specific ru
 recorded in
 [`IEC_DECISIONS.md`](https://github.com/johannesPettersson80/trust-platform/blob/main/docs/IEC_DECISIONS.md#2026-07-30---pou-call-evaluation-execution-control-and-output-transfer).
 
+In a function-block invocation, positional association covers the input and
+in-out formals in declaration order; output formals bind only by name with
+`=>` and otherwise keep their default or stored disposition (CODESYS parity).
+Functions and methods keep full positional association (e.g. the standard
+`SPLIT_DATE` output formals bind positionally).
+
 For a derived function block (CODESYS FB inheritance), the declaration-order
 parameter metadata of step 1 is the block's own parameters followed by the
 base block's, transitively through the `EXTENDS` chain; a name the block or a

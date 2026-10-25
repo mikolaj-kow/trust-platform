@@ -2,16 +2,28 @@ use super::VmNativeArg;
 use crate::vm::errors::VmTrap;
 use alloc::{format, vec, vec::Vec};
 
+/// Resolve call arguments to parameter slots. `positional_outputs` keeps the
+/// legacy full-positional association (functions and methods); a function
+/// block invocation passes `false` — positional association covers the input
+/// and in-out formals in declaration order, output formals bind only by name
+/// with '=>' (CODESYS parity).
 pub fn resolve_vm_arg_indices(
     params: &[crate::vm::module::VmParamMeta],
     args: &[VmNativeArg],
+    positional_outputs: bool,
 ) -> Result<Vec<Option<usize>>, VmTrap> {
     let positional_count = args.iter().take_while(|arg| arg.name.is_none()).count();
-    if positional_count > params.len() {
+    let positional_slots: Vec<usize> = params
+        .iter()
+        .enumerate()
+        .filter(|(_, param)| positional_outputs || param.direction != 1)
+        .map(|(index, _)| index)
+        .collect();
+    if positional_count > positional_slots.len() {
         return Err(VmTrap::InvalidNativeCall(
             format!(
                 "too many positional arguments: expected at most {}, got {positional_count}",
-                params.len()
+                positional_slots.len()
             )
             .into(),
         ));
@@ -27,8 +39,8 @@ pub fn resolve_vm_arg_indices(
     }
 
     let mut indices = vec![None; params.len()];
-    for (index, slot) in indices.iter_mut().enumerate().take(positional_count) {
-        *slot = Some(index);
+    for (slot, index) in positional_slots.iter().zip(0..positional_count) {
+        indices[*slot] = Some(index);
     }
     for (arg_index, arg) in args.iter().enumerate().skip(positional_count) {
         let name = arg

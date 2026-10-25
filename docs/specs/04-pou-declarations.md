@@ -309,8 +309,9 @@ END_FUNCTION_BLOCK
    across files. A name redeclared by the derived block shadows the base
    declaration (static name-level override). Call sites accept the inherited
    `VAR_INPUT`/`VAR_OUTPUT`/`VAR_IN_OUT` members as parameters; positional
-   calls bind the block's own parameters first, then the inherited ones in
-   nearest-base order.
+   calls bind the block's own input and in-out parameters first, then the
+   inherited ones in nearest-base order (output formals bind only by name
+   with `=>`, per `10-runtime-semantics.md` §7.5).
 8. **Can implement interfaces**: A function block declaration may use
    `IMPLEMENTS` with one or more interface names; the parser preserves the
    complete ordered interface list for semantic validation (IEC 61131-3 Ed.3

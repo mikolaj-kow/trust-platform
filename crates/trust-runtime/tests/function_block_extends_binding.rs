@@ -77,13 +77,12 @@ VAR_INPUT xBase : INT; END_VAR
 END_FUNCTION_BLOCK
 FUNCTION_BLOCK ChildFB EXTENDS BaseFB
 VAR_INPUT yOwn : INT; END_VAR
-VAR diff : INT; END_VAR
+VAR_OUTPUT diff : INT; END_VAR
 diff := yOwn - xBase;
 END_FUNCTION_BLOCK
 PROGRAM Main
 VAR fb : ChildFB; out : INT; END_VAR
-fb(INT#10, INT#5);
-out := fb.diff;
+fb(INT#10, INT#5, diff => out);
 END_PROGRAM
 "#;
     let mut runtime = saved_runtime(source);

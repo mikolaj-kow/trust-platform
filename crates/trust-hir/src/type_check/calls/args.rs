@@ -84,8 +84,9 @@ impl<'a, 'b> CallChecker<'a, 'b> {
         &mut self,
         params: &[ParamInfo],
         node: &SyntaxNode,
+        outputs_positional: bool,
     ) -> BoundArgs {
-        self.bind_call_arguments_with_aliases(params, node, &[])
+        self.bind_call_arguments_with_aliases(params, node, &[], outputs_positional)
     }
 
     pub(in crate::type_check) fn bind_call_arguments_with_aliases(
@@ -93,6 +94,7 @@ impl<'a, 'b> CallChecker<'a, 'b> {
         params: &[ParamInfo],
         node: &SyntaxNode,
         aliases: &[(&str, &str)],
+        outputs_positional: bool,
     ) -> BoundArgs {
         let args = self.collect_call_args(node);
         let arg_count = args.len();
@@ -140,10 +142,17 @@ impl<'a, 'b> CallChecker<'a, 'b> {
         };
 
         if formal_call {
+            // In a function-block invocation, positional association covers
+            // the input and in-out formals in declaration order (CODESYS
+            // parity); output formals bind only by name with '=>'. Standard
+            // functions keep full positional association (e.g. SPLIT_DATE).
             let positional_params: Vec<_> = params
                 .iter()
                 .enumerate()
-                .filter(|(_, param)| !is_execution_param(param))
+                .filter(|(_, param)| {
+                    !is_execution_param(param)
+                        && (outputs_positional || param.direction != ParamDirection::Out)
+                })
                 .collect();
             let mut positional_iter = positional_params.iter();
             let mut positional_count = 0usize;
@@ -222,7 +231,10 @@ impl<'a, 'b> CallChecker<'a, 'b> {
             let positional_params: Vec<_> = params
                 .iter()
                 .enumerate()
-                .filter(|(_, param)| !is_execution_param(param))
+                .filter(|(_, param)| {
+                    !is_execution_param(param)
+                        && (outputs_positional || param.direction != ParamDirection::Out)
+                })
                 .collect();
 
             if arg_count != positional_params.len() {
@@ -589,8 +601,9 @@ impl<'a, 'b> CallChecker<'a, 'b> {
         &mut self,
         params: &[ParamInfo],
         node: &SyntaxNode,
+        outputs_positional: bool,
     ) -> (BoundArgs, Vec<Option<(CallArg, TypeId)>>) {
-        let bound = self.bind_call_arguments(params, node);
+        let bound = self.bind_call_arguments(params, node, outputs_positional);
         let mut typed_args = Vec::with_capacity(params.len());
 
         for (param, arg) in params.iter().zip(bound.assigned.iter()) {

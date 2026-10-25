@@ -59,7 +59,10 @@ impl<'a, 'b> StandardChecker<'a, 'b> {
         params: Vec<ParamInfo>,
     ) -> BuiltinCall {
         let arg_count = self.checker.calls().collect_call_args(node).len();
-        let (bound, typed) = self.checker.calls().collect_builtin_args(&params, node);
+        let (bound, typed) = self
+            .checker
+            .calls()
+            .collect_builtin_args(&params, node, true);
         BuiltinCall {
             arg_count,
             bound,

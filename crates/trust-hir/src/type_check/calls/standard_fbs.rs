@@ -64,7 +64,7 @@ impl<'a, 'b> StandardChecker<'a, 'b> {
         let bound = self
             .checker
             .calls()
-            .bind_call_arguments_with_aliases(params, node, aliases);
+            .bind_call_arguments_with_aliases(params, node, aliases, false);
         self.checker
             .calls()
             .check_bound_call_argument_types(params, &bound);
@@ -121,7 +121,10 @@ impl<'a, 'b> StandardChecker<'a, 'b> {
             _ => return,
         };
 
-        let (_bound, typed) = self.checker.calls().collect_builtin_args(&params, node);
+        let (_bound, typed) = self
+            .checker
+            .calls()
+            .collect_builtin_args(&params, node, false);
 
         let pv_type =
             self.counter_value_type(typed.get(pv_index).and_then(|arg| arg.as_ref()), "PV");
@@ -184,7 +187,10 @@ impl<'a, 'b> StandardChecker<'a, 'b> {
             param("ET", TypeId::TIME, ParamDirection::Out),
         ];
 
-        let (_bound, typed) = self.checker.calls().collect_builtin_args(&params, node);
+        let (_bound, typed) = self
+            .checker
+            .calls()
+            .collect_builtin_args(&params, node, false);
 
         let pt_type = self.timer_value_type(typed.get(1).and_then(|arg| arg.as_ref()), "PT");
         let et_type = self.timer_value_type(typed.get(3).and_then(|arg| arg.as_ref()), "ET");

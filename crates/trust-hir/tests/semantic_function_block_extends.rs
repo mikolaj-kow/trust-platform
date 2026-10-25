@@ -330,6 +330,50 @@ END_PROGRAM
 }
 
 #[test]
+fn positional_call_ignores_output_members() {
+    check_no_errors(
+        r#"
+FUNCTION_BLOCK BaseFB
+VAR_INPUT xBase : BOOL; END_VAR
+END_FUNCTION_BLOCK
+
+FUNCTION_BLOCK ChildFB EXTENDS BaseFB
+VAR_INPUT uiOwn : INT; END_VAR
+VAR_OUTPUT outDiff : INT; END_VAR
+END_FUNCTION_BLOCK
+
+PROGRAM Main
+VAR fb : ChildFB; sink : INT; END_VAR
+    fb(INT#3, TRUE);
+    fb(INT#3, TRUE, outDiff => sink);
+END_PROGRAM
+"#,
+    );
+}
+
+#[test]
+fn positional_arguments_cannot_bind_output_members() {
+    check_has_error(
+        r#"
+FUNCTION_BLOCK BaseFB
+VAR_INPUT xBase : BOOL; END_VAR
+END_FUNCTION_BLOCK
+
+FUNCTION_BLOCK ChildFB EXTENDS BaseFB
+VAR_INPUT uiOwn : INT; END_VAR
+VAR_OUTPUT outDiff : INT; END_VAR
+END_FUNCTION_BLOCK
+
+PROGRAM Main
+VAR fb : ChildFB; sink : INT; END_VAR
+    fb(INT#3, TRUE, sink);
+END_PROGRAM
+"#,
+        DiagnosticCode::WrongArgumentCount,
+    );
+}
+
+#[test]
 fn self_extending_base_chain_terminates() {
     let source = r#"
 FUNCTION_BLOCK LoopFB EXTENDS LoopFB

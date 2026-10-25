@@ -304,14 +304,11 @@ fn bind_vm_function_block_arguments_accepts_exact_positional_and_rejects_extra()
         &empty_caller_frame(),
         pou_id,
         instance,
-        &[
-            expr_arg(None, Value::DInt(9)),
-            target_arg(None, out_ref.clone()),
-        ],
+        &[expr_arg(None, Value::DInt(9))],
     )
-    .expect("exact VM FB positional binding");
+    .expect("VM FB positional binding covers the input formal");
 
-    assert_eq!(exact.len(), 1);
+    assert_eq!(exact.len(), 0);
     assert_eq!(instance_field(&runtime, instance, "IN"), Value::DInt(9));
 
     let err = super::bind_vm_function_block_arguments(
@@ -320,11 +317,33 @@ fn bind_vm_function_block_arguments_accepts_exact_positional_and_rejects_extra()
         &empty_caller_frame(),
         pou_id,
         instance,
-        &[
-            expr_arg(None, Value::DInt(9)),
-            target_arg(None, out_ref),
-            expr_arg(None, Value::DInt(99)),
-        ],
+        &[expr_arg(None, Value::DInt(9)), target_arg(None, out_ref.clone())],
+    )
+    .expect_err("positional association must not reach the output formal");
+
+    assert!(
+        matches!(err, VmTrap::InvalidNativeCall(message) if message.contains("too many positional arguments"))
+    );
+
+    let named = super::bind_vm_function_block_arguments(
+        &mut runtime,
+        &module,
+        &empty_caller_frame(),
+        pou_id,
+        instance,
+        &[target_arg(Some("OUT"), out_ref)],
+    )
+    .expect("output formals bind by name");
+
+    assert_eq!(named.len(), 1);
+
+    let err = super::bind_vm_function_block_arguments(
+        &mut runtime,
+        &module,
+        &empty_caller_frame(),
+        pou_id,
+        instance,
+        &[expr_arg(None, Value::DInt(9)), expr_arg(None, Value::DInt(99))],
     )
     .expect_err("extra VM FB positional arg should fail");
 
