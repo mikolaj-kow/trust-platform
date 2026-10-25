@@ -1,13 +1,16 @@
 {
   "name": "trust-lsp",
   "displayName": "truST",
-  "description": "truST \u2014 IEC 61131-3 Structured Text language support",
+  "description": "truST — IEC 61131-3 Structured Text language support",
   "icon": "icon.png",
   "version": "0.24.75",
   "publisher": "trust-platform",
   "license": "MIT OR Apache-2.0",
   "engines": {
     "vscode": "^1.109.0"
+  },
+  "overrides": {
+    "@azure/msal-node": "^7.0.3"
   },
   "categories": [
     "Programming Languages",
