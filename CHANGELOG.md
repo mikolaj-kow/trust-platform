@@ -17,7 +17,9 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
   ordinary initializers keep the strict rule (IEC_DEVIATIONS 2026-10-25).
   The analyzer and the runtime harness fold the same value, so
   documentation-faithful sizes (128/20/40-class stub constants) compile at
-  their declared capacities instead of failing the compile.
+  their declared capacities instead of failing the compile. PLCopen
+  import/export passes symbolic string lengths through verbatim (mirroring
+  array dimensions) instead of failing POUs closed at import.
 - Function-block call arguments: positional association now covers the input
   and in-out formals only, in declaration order; output formals bind
   exclusively by name with `=>` (CODESYS parity). Previously output members
