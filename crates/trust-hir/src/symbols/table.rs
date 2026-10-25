@@ -817,8 +817,17 @@ impl SymbolTable {
 
     /// Returns the base type name for a symbol, if any.
     #[must_use]
-    pub fn extends_name(&self, owner: SymbolId) -> Option<&SmolStr> {
+    pub(crate) fn extends_name(&self, owner: SymbolId) -> Option<&SmolStr> {
         self.extends.get(&owner).map(|reference| &reference.name)
+    }
+
+    /// Resolves a symbol's `EXTENDS` base to its declaration symbol, if any.
+    /// The raw base name stays crate-private; external consumers walk the
+    /// inheritance chain through this accessor.
+    #[must_use]
+    pub fn resolve_extends_base(&self, owner: SymbolId) -> Option<SymbolId> {
+        let base_name = self.extends_name(owner)?;
+        self.resolve_oop_reference_for_owner(owner, base_name.as_str())
     }
 
     /// Returns implemented interface names for a symbol, if any.

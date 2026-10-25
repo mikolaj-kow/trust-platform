@@ -122,9 +122,7 @@ fn parameters_from_owner_scope(symbols: &SymbolTable, owner_id: SymbolId) -> Vec
         .collect();
     let mut visited = std::collections::HashSet::new();
     visited.insert(owner_id);
-    let mut current = symbols
-        .extends_name(owner_id)
-        .and_then(|base| symbols.resolve_oop_reference_for_owner(owner_id, base.as_str()));
+    let mut current = symbols.resolve_extends_base(owner_id);
     while let Some(base_id) = current {
         if !visited.insert(base_id) {
             break;
@@ -158,9 +156,7 @@ fn parameters_from_owner_scope(symbols: &SymbolTable, owner_id: SymbolId) -> Vec
                 parameters.push(symbol_id);
             }
         }
-        current = symbols
-            .extends_name(base_id)
-            .and_then(|base| symbols.resolve_oop_reference_for_owner(base_id, base.as_str()));
+        current = symbols.resolve_extends_base(base_id);
     }
     parameters
 }
