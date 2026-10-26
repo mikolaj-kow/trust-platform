@@ -33,6 +33,7 @@ pub(crate) use model::{
 pub(super) use model::{CompileTimeConsts, ConfigModel, LoweringContext, LoweringInputs};
 pub(super) use pou::{
     lower_classes, lower_function_blocks, lower_functions, lower_interfaces, lower_programs,
+    merge_inherited_function_block_parameters,
 };
 pub(crate) use types::{class_type_name, function_block_type_name};
 pub(super) use types::{

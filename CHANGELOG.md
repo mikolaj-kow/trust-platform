@@ -6,6 +6,28 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+- Function-block call arguments: positional association now covers the input
+  and in-out formals only, in declaration order; output formals bind
+  exclusively by name with `=>` (CODESYS parity). Previously output members
+  counted toward the positional expectation and could consume positional
+  arguments, rejecting legal `fb(1, 2)` calls on function blocks that also
+  declare outputs and accepting nonstandard positional output binding.
+  Functions and methods keep full positional association (`SPLIT_DATE`
+  keeps working); analyzer and runtime enforce the same rule.
+- FUNCTION_BLOCK `EXTENDS` resolves inherited members (CODESYS FB
+  inheritance): a derived block sees the base block's members across all
+  variable sections and its methods, transitively through the chain and
+  across files; a redeclared name shadows the base declaration. Call sites
+  accept inherited `VAR_INPUT`/`VAR_OUTPUT`/`VAR_IN_OUT` members as
+  parameters (own input and in-out parameters before inherited ones for
+  positional calls; outputs bind only by name), and the runtime binds
+  inherited named, omitted and output arguments like own ones.
+- Interface and abstract-method conformance diagnostics move from `E202` to
+  the new dedicated code `E208` ("must implement method/property", signature
+  and visibility mismatches, missing abstract implementations). Type-used-
+  as-value, access-specifier and initializer-constraint diagnostics keep
+  `E202`, so per-code severity overrides no longer mask interface
+  completeness regressions.
 - Declaration sizes gain the CODESYS vendor leniency recorded in
   IEC_DEVIATIONS 2026-10-21: a `STRING`/`WSTRING` capacity or an array
   dimension bound may name a plain initializer-backed variable, including

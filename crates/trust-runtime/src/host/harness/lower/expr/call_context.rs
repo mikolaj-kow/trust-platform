@@ -111,6 +111,53 @@ fn parameters_from_owner_scope(symbols: &SymbolTable, owner_id: SymbolId) -> Vec
             .map(|symbol| symbol.range.start())
             .unwrap_or_default()
     });
+    // CODESYS function block inheritance: the callable interface of a derived
+    // function block includes the base's VAR_INPUT / VAR_OUTPUT / VAR_IN_OUT
+    // members, transitively through the EXTENDS chain. A name redeclared by
+    // the block or a nearer base shadows the base declaration.
+    let mut owned: std::collections::HashSet<SmolStr> = parameters
+        .iter()
+        .filter_map(|symbol_id| symbols.get(*symbol_id))
+        .map(|symbol| SmolStr::new(symbol.name.to_ascii_uppercase()))
+        .collect();
+    let mut visited = std::collections::HashSet::new();
+    visited.insert(owner_id);
+    let mut current = symbols.resolve_extends_base(owner_id);
+    while let Some(base_id) = current {
+        if !visited.insert(base_id) {
+            break;
+        }
+        let mut base_parameters = symbols
+            .scope_for_owner(base_id)
+            .and_then(|scope_id| symbols.get_scope(scope_id))
+            .map(|scope| {
+                scope
+                    .symbol_ids()
+                    .copied()
+                    .filter(|symbol_id| {
+                        symbols
+                            .get(*symbol_id)
+                            .is_some_and(|symbol| matches!(symbol.kind, SymbolKind::Parameter { .. }))
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        base_parameters.sort_by_key(|symbol_id| {
+            symbols
+                .get(*symbol_id)
+                .map(|symbol| symbol.range.start())
+                .unwrap_or_default()
+        });
+        for symbol_id in base_parameters {
+            let Some(symbol) = symbols.get(symbol_id) else {
+                continue;
+            };
+            if owned.insert(SmolStr::new(symbol.name.to_ascii_uppercase())) {
+                parameters.push(symbol_id);
+            }
+        }
+        current = symbols.resolve_extends_base(base_id);
+    }
     parameters
 }
 

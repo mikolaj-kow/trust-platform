@@ -366,6 +366,7 @@ fn lower_named_declarations(
             builder.register_function_block(fb);
         }
     }
+    super::merge_inherited_function_block_parameters(builder.function_blocks_mut());
 
     let mut function_names = std::collections::HashSet::new();
     for (idx, parse) in frontend.parses.iter().enumerate() {

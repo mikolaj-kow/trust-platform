@@ -444,6 +444,15 @@ CLASS Derived EXTENDS Sealed  // ERROR: Cannot extend FINAL class
 END_CLASS
 ```
 
+FUNCTION_BLOCK `EXTENDS` (CODESYS parity, vendor extension) follows the same
+single-inheritance, acyclic, target-kind rules. A derived block additionally
+resolves the base block's members across all variable sections and its
+methods transitively through the chain and across files; a redeclared name
+shadows the base declaration (static name-level override), and call sites
+accept inherited input/output/in-out members as parameters (own parameters
+before inherited ones for positional calls). See `04-pou-declarations.md`
+rule 7.
+
 ### 5.2 Override Rules
 
 | Rule | Error Condition |

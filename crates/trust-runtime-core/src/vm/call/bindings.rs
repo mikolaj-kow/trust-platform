@@ -314,7 +314,7 @@ pub fn bind_vm_function_block_arguments(
     let params = module.pou_params(pou_id).ok_or_else(|| {
         VmTrap::InvalidNativeCall(format!("missing parameter metadata for pou id {pou_id}").into())
     })?;
-    let arg_indices = resolve_vm_arg_indices(params, args)?;
+    let arg_indices = resolve_vm_arg_indices(params, args, false)?;
     let mut prepared_targets = Vec::with_capacity(params.len());
     for (param, arg_index) in params.iter().zip(arg_indices.iter().copied()) {
         let arg = arg_index.and_then(|index| args.get(index));
@@ -557,7 +557,7 @@ fn bind_vm_call_arguments_from_source(
     let mut present = vec![false; locals.len()];
     let capture_return = module.pou_has_return_slot(pou_id);
     let return_slots = usize::from(capture_return);
-    let arg_indices = resolve_vm_arg_indices(params, args.arguments())?;
+    let arg_indices = resolve_vm_arg_indices(params, args.arguments(), true)?;
 
     for (index, param) in params.iter().enumerate() {
         let slot = return_slots + index;

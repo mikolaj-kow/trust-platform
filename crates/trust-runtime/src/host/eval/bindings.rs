@@ -7,8 +7,18 @@ fn prepare_bindings(
 ) -> Result<PreparedBindings, RuntimeError> {
     let positional = args.iter().all(|arg| arg.name.is_none());
     let mut positional_iter = if positional { Some(args.iter()) } else { None };
+    // In a function-block invocation, positional association covers the input
+    // and in-out formals in declaration order (CODESYS parity); output
+    // formals bind only by name with '=>'. Functions and methods keep full
+    // positional association.
+    let fb_invocation = matches!(mode, BindingMode::FunctionBlock { .. });
     if positional {
-        let expected = params.iter().filter(|param| !is_en_eno(param)).count();
+        let expected = params
+            .iter()
+            .filter(|param| {
+                !is_en_eno(param) && !(fb_invocation && param.direction == ParamDirection::Out)
+            })
+            .count();
         if args.len() != expected {
             return Err(RuntimeError::InvalidArgumentCount {
                 expected,
@@ -63,7 +73,13 @@ fn prepare_bindings(
         }
 
         let arg = if positional {
-            positional_iter.as_mut().and_then(|iter| iter.next())
+            if fb_invocation && param.direction == ParamDirection::Out {
+                // Outputs never consume a positional actual; they bind only
+                // by name with '=>' or keep their default/disposition.
+                None
+            } else {
+                positional_iter.as_mut().and_then(|iter| iter.next())
+            }
         } else {
             find_arg_value(args, &param.name)
         };
