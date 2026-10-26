@@ -6,6 +6,15 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+- Qualified type references resolve case-insensitively through the
+  cross-file project type catalog: a consumer spelling a namespace-
+  qualified function-block type with different casing than the declaring
+  file (`WagoAppJSON.FB_JSON_Writer_02` over a stub declaring
+  `Fb_JSON_Writer_02`) now resolves the type and can invoke the instance
+  (`fbInst(...)`), instead of silently failing the type lookup and
+  reporting "not callable" at the call site. ST identifiers are
+  case-insensitive; the catalog now keys and matches like the symbol
+  table.
 - Declaration sizes over flattened library containers: a dotted size
   reference (`STRING(LogParameter.MAX_LOG_MSG_LEN)`,
   `STRING(WagoTypesLog.LogParameter.MAX_LOG_MSG_LEN)`) resolves when the
