@@ -21,6 +21,12 @@ capture_test_discovery() {
 
   "${ROOT_DIR}/scripts/cargo_test_fast_link.sh" test -p trust-hir --test semantic_type_checking -- --list > "${TMP_DIR}/hir-${tag}.raw"
   grep ': test$' "${TMP_DIR}/hir-${tag}.raw" | sed 's/\r$//' | sort > "${TMP_DIR}/hir-${tag}.list"
+
+  # HIR diagnostics contract tests (lib target, e.g. unused/contract_tests.rs):
+  # collector drift otherwise ships silently - these tests are not in any
+  # other tracked discovery set (extended 2026-10-27).
+  "${ROOT_DIR}/scripts/cargo_test_fast_link.sh" test -p trust-hir --lib db::diagnostics:: -- --list > "${TMP_DIR}/hir-diag-${tag}.raw"
+  grep ': test$' "${TMP_DIR}/hir-diag-${tag}.raw" | sed 's/\r$//' | sort > "${TMP_DIR}/hir-diag-${tag}.list"
 }
 
 capture_snapshot_inventory() {
@@ -44,6 +50,7 @@ write_baseline() {
   mkdir -p "${BASELINE_DIR}"
   cp "${TMP_DIR}/lsp-baseline.list" "${BASELINE_DIR}/lsp-test-discovery-baseline.list"
   cp "${TMP_DIR}/hir-baseline.list" "${BASELINE_DIR}/hir-type-checking-test-discovery-baseline.list"
+  cp "${TMP_DIR}/hir-diag-baseline.list" "${BASELINE_DIR}/hir-diagnostics-test-discovery-baseline.list"
   cp "${TMP_DIR}/lsp-snapshots.list" "${BASELINE_DIR}/lsp-snapshots-baseline.list"
   cp "${TMP_DIR}/hir-snapshots.list" "${BASELINE_DIR}/hir-snapshots-baseline.list"
   echo "Captured MP-001 baseline into ${BASELINE_DIR}"
@@ -74,11 +81,13 @@ capture_all "run1"
 
 ensure_baseline_exists "${BASELINE_DIR}/lsp-test-discovery-baseline.list"
 ensure_baseline_exists "${BASELINE_DIR}/hir-type-checking-test-discovery-baseline.list"
+ensure_baseline_exists "${BASELINE_DIR}/hir-diagnostics-test-discovery-baseline.list"
 ensure_baseline_exists "${BASELINE_DIR}/lsp-snapshots-baseline.list"
 ensure_baseline_exists "${BASELINE_DIR}/hir-snapshots-baseline.list"
 
 diff -u "${BASELINE_DIR}/lsp-test-discovery-baseline.list" "${TMP_DIR}/lsp-run1.list"
 diff -u "${BASELINE_DIR}/hir-type-checking-test-discovery-baseline.list" "${TMP_DIR}/hir-run1.list"
+diff -u "${BASELINE_DIR}/hir-diagnostics-test-discovery-baseline.list" "${TMP_DIR}/hir-diag-run1.list"
 diff -u "${BASELINE_DIR}/lsp-snapshots-baseline.list" "${TMP_DIR}/lsp-snapshots.list"
 diff -u "${BASELINE_DIR}/hir-snapshots-baseline.list" "${TMP_DIR}/hir-snapshots.list"
 
@@ -89,7 +98,10 @@ diff -u "${TMP_DIR}/lsp-run1.list" "${TMP_DIR}/lsp-run2.list"
 diff -u "${TMP_DIR}/lsp-run1.list" "${TMP_DIR}/lsp-run3.list"
 diff -u "${TMP_DIR}/hir-run1.list" "${TMP_DIR}/hir-run2.list"
 diff -u "${TMP_DIR}/hir-run1.list" "${TMP_DIR}/hir-run3.list"
+diff -u "${TMP_DIR}/hir-diag-run1.list" "${TMP_DIR}/hir-diag-run2.list"
+diff -u "${TMP_DIR}/hir-diag-run1.list" "${TMP_DIR}/hir-diag-run3.list"
 
 echo "MP-001 parity check passed:"
 echo "  - LSP handler tests: $(wc -l < "${TMP_DIR}/lsp-run1.list") cases"
 echo "  - HIR semantic type-checking tests: $(wc -l < "${TMP_DIR}/hir-run1.list") cases"
+echo "  - HIR diagnostics contract tests: $(wc -l < "${TMP_DIR}/hir-diag-run1.list") cases"

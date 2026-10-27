@@ -6,6 +6,17 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+- Unused-symbol analysis: `EXTENDS` and `IMPLEMENTS` targets count as used —
+  a function block referenced only as a base class (or a DUT/interface only
+  inherited) no longer receives a false `W009` unused warning, while the
+  never-instantiated derived declaration still does.
+- Unused-symbol analysis: qualified value access chains (`GVals.Member`,
+  dotted declaration-size references) now mark the TERMINAL symbol used.
+  The parser models these as nested field-access nodes with a plain `Name`
+  terminal, which the unused-symbol collector never resolved — constants
+  referenced only through qualified cross-file uses (expressions,
+  `STRING[GVals.Len]` sizes) were falsely reported as `W001` unused
+  constants. Genuinely unreferenced constants still warn.
 - PLCopen GVL import: members that a dropped same-named `constant="true"`
   mirror list re-declares keep constant-ness — the merged list renders a
   separate `VAR_GLOBAL CONSTANT` section for them (`PLCO226` info)

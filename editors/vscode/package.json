@@ -10,7 +10,8 @@
     "vscode": "^1.109.0"
   },
   "overrides": {
-    "@azure/msal-node": "^7.0.3"
+    "@azure/msal-node": "^7.0.3",
+    "qs": "^6.16.1"
   },
   "categories": [
     "Programming Languages",

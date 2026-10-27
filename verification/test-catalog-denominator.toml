@@ -44464,6 +44464,26 @@ reason_code = "no_reviewed_spec_or_invariant_binding"
 last_reviewed = "2026-08-01"
 
 [[reviews]]
+discovery_id = "DISC_139C4C32A7DEDA335B5C"
+discovery_source_kind = "rust_unit_test"
+path = "crates/trust-hir/src/db/diagnostics/unused/contract_tests.rs"
+name = "qualified_cross_file_gvl_member_use_clears_the_unused_constant_warning"
+ignore_state = "not_ignored"
+disposition = "reviewed_nonmapping"
+reason_code = "no_reviewed_spec_or_invariant_binding"
+last_reviewed = "2026-10-27"
+
+[[reviews]]
+discovery_id = "DISC_E0A60C993B0DD08795F9"
+discovery_source_kind = "rust_unit_test"
+path = "crates/trust-hir/src/db/diagnostics/unused/contract_tests.rs"
+name = "qualified_declaration_size_use_clears_the_unused_constant_warning"
+ignore_state = "not_ignored"
+disposition = "reviewed_nonmapping"
+reason_code = "no_reviewed_spec_or_invariant_binding"
+last_reviewed = "2026-10-27"
+
+[[reviews]]
 discovery_id = "DISC_F606E55679E4C3E88ECC"
 discovery_source_kind = "rust_integration_test"
 path = "crates/trust-runtime/tests/bounded_value_semantics.rs"
