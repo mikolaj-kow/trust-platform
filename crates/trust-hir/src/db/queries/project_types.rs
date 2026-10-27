@@ -87,7 +87,13 @@ pub(super) fn build_project_type_catalog(
                 kind: entry.kind,
                 range: entry.range,
             };
-            if let Some(primary) = entries.get(entry.qualified_name.as_str()).cloned() {
+            // ST identifiers are case-insensitive: vendor stubs spell a
+            // qualified type one way (`WagoTypesLog.Fb_...`) while project
+            // code writes another (`...FB_...`). Key the catalog by the
+            // same normalized form the symbol table uses
+            // (`normalize_name` = ASCII uppercase).
+            let key = SmolStr::new(entry.qualified_name.to_ascii_uppercase());
+            if let Some(primary) = entries.get(key.as_str()).cloned() {
                 duplicates.push(ProjectTypeDuplicate {
                     qualified_name: entry.qualified_name.clone(),
                     primary,
@@ -95,7 +101,7 @@ pub(super) fn build_project_type_catalog(
                 });
                 continue;
             }
-            entries.insert(entry.qualified_name, candidate);
+            entries.insert(key, candidate);
         }
     }
 
@@ -135,21 +141,27 @@ fn find_project_type_declaration_inner(
         SyntaxKind::TypeDecl if matches!(kind, ProjectTypeKind::Data) => {
             type_decl_entries(node, namespace).into_iter().find_map(
                 |(candidate, _range, type_def)| {
-                    (candidate.as_str() == qualified_name).then_some(type_def)
+                    (candidate.eq_ignore_ascii_case(qualified_name)).then_some(type_def)
                 },
             )
         }
         SyntaxKind::FunctionBlock if matches!(kind, ProjectTypeKind::FunctionBlock) => {
             let (name, _) = name_from_node(node)?;
-            (qualify_name(namespace, &name).as_str() == qualified_name).then(|| node.clone())
+            qualify_name(namespace, &name)
+                .eq_ignore_ascii_case(qualified_name)
+                .then(|| node.clone())
         }
         SyntaxKind::Class if matches!(kind, ProjectTypeKind::Class) => {
             let (name, _) = name_from_node(node)?;
-            (qualify_name(namespace, &name).as_str() == qualified_name).then(|| node.clone())
+            qualify_name(namespace, &name)
+                .eq_ignore_ascii_case(qualified_name)
+                .then(|| node.clone())
         }
         SyntaxKind::Interface if matches!(kind, ProjectTypeKind::Interface) => {
             let (name, _) = name_from_node(node)?;
-            (qualify_name(namespace, &name).as_str() == qualified_name).then(|| node.clone())
+            qualify_name(namespace, &name)
+                .eq_ignore_ascii_case(qualified_name)
+                .then(|| node.clone())
         }
         _ => node.children().find_map(|child| {
             find_project_type_declaration_inner(&child, namespace, qualified_name, kind)
