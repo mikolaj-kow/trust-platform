@@ -24,7 +24,7 @@ interfaces = []
 [runtime.mesh]
 enabled = false
 listen = "127.0.0.1:15200"
-auth_token = ""
+auth_token = "reliability-local-only"
 publish = []
 subscribe = {}
 
