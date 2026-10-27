@@ -6,6 +6,10 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+- Unused-symbol analysis: `EXTENDS` and `IMPLEMENTS` targets count as used —
+  a function block referenced only as a base class (or a DUT/interface only
+  inherited) no longer receives a false `W009` unused warning, while the
+  never-instantiated derived declaration still does.
 - Unused-symbol analysis: qualified value access chains (`GVals.Member`,
   dotted declaration-size references) now mark the TERMINAL symbol used.
   The parser models these as nested field-access nodes with a plain `Name`

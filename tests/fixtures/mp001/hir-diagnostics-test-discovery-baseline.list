@@ -106,9 +106,11 @@ db::diagnostics::unreachable::contract_tests::true_elsif_after_unknown_condition
 db::diagnostics::unreachable::contract_tests::true_if_marks_all_later_elsif_and_else_statements_unreachable: test
 db::diagnostics::unreachable::contract_tests::unknown_conditions_do_not_create_wrong_reason_unreachable_warning: test
 db::diagnostics::unused::contract_tests::configuration_program_instance_marks_program_type_used: test
+db::diagnostics::unused::contract_tests::extends_base_is_used_by_the_inheriting_declaration: test
 db::diagnostics::unused::contract_tests::function_block_type_reference_marks_function_block_used: test
 db::diagnostics::unused::contract_tests::function_call_marks_function_used: test
 db::diagnostics::unused::contract_tests::function_result_assignment_does_not_make_function_externally_used: test
+db::diagnostics::unused::contract_tests::implements_interface_is_used_by_the_implementing_class: test
 db::diagnostics::unused::contract_tests::imported_declarations_do_not_receive_duplicate_unused_warnings: test
 db::diagnostics::unused::contract_tests::interface_method_input_parameter_is_a_prototype_not_an_unused_value: test
 db::diagnostics::unused::contract_tests::local_constant_warns_but_global_constant_does_not: test
