@@ -245,3 +245,23 @@ This file tracks implementation decisions made where PLCopen profiles or source 
 - Reason: assignment-to-constant diagnostics and `is_constant` pools on
   the mirror must match the vendor project's semantics; silent qualifier
   loss is a fidelity class the dialect mirror cannot tolerate.
+
+## 2026-10-28 - Method VAR_IN_OUT sections import as by-reference method parameters
+
+- Context: e!COCKPIT/CODESYS exports declare `VAR_IN_OUT` (by-reference)
+  parameters in addData `<Method>` blocks exactly as at FUNCTION and
+  FUNCTION_BLOCK interface level (measured on the s4 WAGO PFC200 project,
+  whose methods take FB-typed in-out device handles). Retagging them to
+  inputs for import misrepresents by-ref parameters as by-value and makes
+  writes through them fire invalid-assignment-target diagnostics.
+- Decision: `<inOutVars>` sections inside addData `<Method>` blocks import
+  natively - the method attaches to its owner FUNCTION_BLOCK/PROGRAM and
+  the section renders as a `VAR_IN_OUT` block in the emitted `.st` method
+  declaration, through the same section renderer as FUNCTION- and
+  FB-level interfaces. The semantic model treats them as in-out
+  parameters, so writes through them are legal (no
+  invalid-assignment-target diagnostic).
+- Reason: keeps the native method model by-ref-faithful; the vendor
+  dialect treats method `VAR_IN_OUT` identically to POU-level
+  `VAR_IN_OUT`. The legacy sibling-POU serialization (`pouType="method"`)
+  remains unsupported and is tracked as a separate import-path item.
