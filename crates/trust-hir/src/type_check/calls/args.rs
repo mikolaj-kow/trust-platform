@@ -522,22 +522,13 @@ impl<'a, 'b> CallChecker<'a, 'b> {
             self.checker.symbols.type_by_id(formal_resolved),
             self.checker.symbols.type_by_id(actual_resolved),
         ) {
-            (
-                Some(Type::String {
-                    max_len: formal_len,
-                }),
-                Some(Type::String {
-                    max_len: actual_len,
-                }),
-            )
-            | (
-                Some(Type::WString {
-                    max_len: formal_len,
-                }),
-                Some(Type::WString {
-                    max_len: actual_len,
-                }),
-            ) => formal_len == actual_len,
+            // CODESYS binds in-out strings across declared capacities: the
+            // vendor buffer idiom (a STRING(1) formal whose real capacity
+            // arrives in a separate size argument, e.g.
+            // WagoAppString.StrAppend) only works that way, and copy-back
+            // safety is the callee's contract through that size argument.
+            (Some(Type::String { .. }), Some(Type::String { .. }))
+            | (Some(Type::WString { .. }), Some(Type::WString { .. })) => true,
             _ => {
                 self.checker.is_assignable(formal, actual)
                     && self.checker.is_assignable(actual, formal)

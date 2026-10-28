@@ -6,6 +6,12 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+- Call binding: `VAR_IN_OUT` strings bind across declared capacities (same
+  string family only), matching CODESYS and the vendor buffer idiom of a
+  `STRING(1)` formal whose real capacity arrives in a separate size argument
+  (`WagoAppString.StrAppend`). The previous capacity-equality rule rejected
+  vendor-library calls that compile clean in the vendor toolchain; see
+  `IEC_DEVIATIONS.md` (DEV-024).
 - Implicit-conversion warning: a derived DUT converted to its own ancestor
   (directly or transitively) no longer emits `ImplicitConversion` — the
   conversion is a well-defined base-part-copy upcast that assignment

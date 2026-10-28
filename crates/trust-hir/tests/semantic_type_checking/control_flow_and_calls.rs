@@ -383,7 +383,12 @@ END_PROGRAM
 }
 
 #[test]
-fn string_in_out_requires_equal_declared_capacity() {
+fn string_in_out_binds_across_declared_capacities() {
+    // IEC_DEVIATIONS DEV-024 (supersedes the 2026-07-13 capacity-equality
+    // decision): in-out strings bind across declared capacities, including
+    // bounded-to-unbounded, in both width directions. Only the STRING vs
+    // WSTRING family boundary still rejects (pinned in
+    // call_binding_contract_rejection).
     let errors = check_errors(
         r#"
 FUNCTION_BLOCK Bind
@@ -411,8 +416,8 @@ END_PROGRAM
             .iter()
             .filter(|code| **code == DiagnosticCode::InvalidArgumentType)
             .count(),
-        3,
-        "STRING/WSTRING width mismatches and bounded/unbounded binding must be rejected: {errors:?}"
+        0,
+        "in-out strings bind across capacities and bounded-to-unbounded: {errors:?}"
     );
 }
 
