@@ -6,6 +6,11 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+- Implicit-conversion warning: a derived DUT converted to its own ancestor
+  (directly or transitively) no longer emits `ImplicitConversion` — the
+  conversion is a well-defined base-part-copy upcast that assignment
+  compatibility already accepts. Conversions between DUTs without an
+  ancestor relation keep the warning.
 - Unused-symbol analysis: input parameters of a method that IMPLEMENTS an
   interface method no longer receive a false `W002` unused-parameter
   warning — the implementing POU must carry the full interface signature
