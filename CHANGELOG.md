@@ -6,6 +6,11 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+- Integer/bit-string narrowing (assignments and call arguments) is now a
+  warning instead of an error, matching the CODESYS compiler warning; and
+  `SIZEOF` yields its natural unsigned magnitude (`UDINT`) so vendor
+  `udiSize` parameters bind directly. Non-integer mismatches keep their
+  errors; see `IEC_DEVIATIONS.md` (DEV-026).
 - Standard conversions: vendor-extension entries match the CODESYS/TwinCAT
   toolchain — `TO_STRING`/`*_TO_STRING` over enumerated values (variant
   name), `BOOL` (`'TRUE'`/`'FALSE'`), `TIME`/`LTIME` (`T#`/`LT#` text), and

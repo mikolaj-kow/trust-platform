@@ -1,5 +1,6 @@
 use super::super::*;
 use crate::diagnostics::DiagnosticCode;
+use crate::DiagnosticSeverity;
 
 #[test]
 fn test_database_basic() {
@@ -92,11 +93,16 @@ fn lint_minimum_literal_initializes_typed_and_untyped_without_errors() {
 
 #[test]
 fn literal_one_past_an_integer_bound_is_reported_once() {
+    // DEV-026: DINT into ULINT is a narrowing binding (warning); the
+    // out-of-range literal is reported exactly once as OutOfRange, because
+    // the warning no longer suppresses the range check.
+    let source = "PROGRAM Main\nVAR u : ULINT; END_VAR\nu := 18446744073709551616;\nEND_PROGRAM";
     assert_only_error(
-        "PROGRAM Main\nVAR u : ULINT; END_VAR\nu := 18446744073709551616;\nEND_PROGRAM",
-        DiagnosticCode::IncompatibleAssignment,
-        "cannot assign 'DINT' to 'ULINT'",
+        source,
+        DiagnosticCode::OutOfRange,
+        "integer literal 18446744073709551616 is outside the range of ULINT",
     );
+    assert_one_narrowing_warning(source, DiagnosticCode::IncompatibleAssignment);
     for (initial, message) in [
         (
             "ULINT := 18446744073709551616",
@@ -213,6 +219,25 @@ fn assert_only_error_code(source: &str, code: DiagnosticCode) {
     );
 }
 
+/// Asserts that `source` carries exactly one narrowing warning of `code`
+/// (DEV-026: integer/bit-string bindings demoted from error to warning).
+fn assert_one_narrowing_warning(source: &str, code: DiagnosticCode) {
+    let mut db = Database::new();
+    let file = FileId(0);
+    db.set_source_text(file, source.to_string());
+    let narrowing = db
+        .diagnostics(file)
+        .iter()
+        .filter(|diagnostic| {
+            diagnostic.code == code && diagnostic.severity == DiagnosticSeverity::Warning
+        })
+        .count();
+    assert_eq!(
+        narrowing, 1,
+        "expected exactly one narrowing warning for {code:?} in {source}"
+    );
+}
+
 #[test]
 fn literal_above_lint_maximum_is_rejected_by_assignment_analysis() {
     assert_only_error(
@@ -226,13 +251,17 @@ fn literal_above_lint_maximum_is_rejected_by_assignment_analysis() {
 }
 
 #[test]
-fn narrow_literal_assignment_reports_one_error() {
-    // The assignment check already rejects 128 for SINT, so the range check adds nothing.
+fn narrow_literal_assignment_reports_range_once_and_narrowing_warning() {
+    // DEV-026: the assignment-level rejection of 128 into SINT is a
+    // narrowing warning now, so the range check still runs and reports the
+    // out-of-range literal exactly once.
+    let source = "PROGRAM Main\nVAR small : SINT; END_VAR\nsmall := 128;\nEND_PROGRAM";
     assert_only_error(
-        "PROGRAM Main\nVAR small : SINT; END_VAR\nsmall := 128;\nEND_PROGRAM",
-        DiagnosticCode::IncompatibleAssignment,
-        "cannot assign 'INT' to 'SINT'",
+        source,
+        DiagnosticCode::OutOfRange,
+        "integer literal 128 is outside the range of SINT",
     );
+    assert_one_narrowing_warning(source, DiagnosticCode::IncompatibleAssignment);
 }
 
 #[test]
@@ -241,8 +270,14 @@ fn udint_call_argument_outside_its_range_is_reported_once() {
     let outside = format!(
         "{function}PROGRAM Main\nVAR r : INT; END_VAR\nr := F(x := 4294967296);\nEND_PROGRAM"
     );
-    // The argument check already rejects the value, so only that diagnostic is reported.
-    assert_only_error_code(&outside, DiagnosticCode::InvalidArgumentType);
+    // DEV-026: the narrowed argument is a warning; the out-of-range literal
+    // is the only error, reported once.
+    assert_only_error(
+        &outside,
+        DiagnosticCode::OutOfRange,
+        "integer literal 4294967296 is outside the range of UDINT",
+    );
+    assert_one_narrowing_warning(&outside, DiagnosticCode::InvalidArgumentType);
     let inside = format!(
         "{function}PROGRAM Main\nVAR r : INT; END_VAR\nr := F(x := 4294967295);\nEND_PROGRAM"
     );

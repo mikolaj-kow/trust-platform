@@ -160,6 +160,36 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
+    /// CODESYS silent-narrowing parity (IEC_DEVIATIONS DEV-026): a binding
+    /// between two integer/bit-string types is value-changing but legal —
+    /// the vendor toolchain compiles it with a warning. Used to demote
+    /// assignment and call-argument mismatch diagnostics from error to
+    /// warning; everything else (REAL, enums, strings, aggregates) keeps
+    /// the error.
+    pub(crate) fn is_integer_bit_string_binding(&self, target: TypeId, source: TypeId) -> bool {
+        let integer_or_bit_string = |type_id: TypeId| {
+            let resolved = self.resolve_alias_type(type_id);
+            matches!(
+                self.symbols.type_by_id(resolved),
+                Some(
+                    Type::SInt
+                        | Type::Int
+                        | Type::DInt
+                        | Type::LInt
+                        | Type::USInt
+                        | Type::UInt
+                        | Type::UDInt
+                        | Type::ULInt
+                        | Type::Byte
+                        | Type::Word
+                        | Type::DWord
+                        | Type::LWord
+                )
+            )
+        };
+        integer_or_bit_string(target) && integer_or_bit_string(source)
+    }
+
     pub(super) fn types_compatible(&self, target: &Type, source: &Type) -> bool {
         let target = self.normalize_subrange(target);
         let source = self.normalize_subrange(source);

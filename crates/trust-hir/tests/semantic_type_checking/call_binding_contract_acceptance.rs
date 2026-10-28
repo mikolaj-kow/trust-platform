@@ -307,3 +307,44 @@ fn call_binding_contract_accepts_in_out_wstring_across_capacities() {
         "{WSTRING_SPLICE_INTERFACE}\nPROGRAM Main\nVAR\nwide : WSTRING(20); result : DINT; END_VAR\nresult := SpliceWide(wide, wide);\nEND_PROGRAM"
     ));
 }
+
+#[test]
+fn call_binding_contract_warns_on_integer_narrowing_argument() {
+    // CODESYS parity (IEC_DEVIATIONS DEV-026): a BYTE input receiving an
+    // INT variable is a warning, not a call-binding error — the DMX port
+    // idiom in the downstream tree does this on every call.
+    let mut db = Database::new();
+    let file = FileId(0);
+    db.set_source_text(
+        file,
+        r#"
+FUNCTION Drive : DINT
+VAR_INPUT port : BYTE; END_VAR
+Drive := port;
+END_FUNCTION
+PROGRAM Main
+VAR portNum : INT; result : DINT; END_VAR
+result := Drive(portNum);
+END_PROGRAM
+"#
+        .to_string(),
+    );
+    let mismatches: Vec<(DiagnosticCode, DiagnosticSeverity)> = {
+        let diagnostics = db.diagnostics(file);
+        diagnostics
+            .iter()
+            .filter(|d| d.code == DiagnosticCode::InvalidArgumentType)
+            .map(|d| (d.code, d.severity))
+            .collect()
+    };
+    assert_eq!(
+        mismatches.len(),
+        1,
+        "narrowing argument stays diagnosed once: {mismatches:?}"
+    );
+    assert_eq!(
+        mismatches[0].1,
+        DiagnosticSeverity::Warning,
+        "integer narrowing at a call argument is a warning: {mismatches:?}"
+    );
+}

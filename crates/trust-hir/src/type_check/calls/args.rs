@@ -336,11 +336,25 @@ impl<'a, 'b> CallChecker<'a, 'b> {
                             );
                         }
                     } else {
-                        self.checker.diagnostics.error(
-                            DiagnosticCode::InvalidArgumentType,
-                            arg.range,
-                            self.invalid_argument_type_message(param, arg_type),
-                        );
+                        let message = self.invalid_argument_type_message(param, arg_type);
+                        if self
+                            .checker
+                            .is_integer_bit_string_binding(param.type_id, arg_type)
+                        {
+                            // CODESYS narrows integer/bit-string call
+                            // arguments with a warning (DEV-026).
+                            self.checker.diagnostics.warning(
+                                DiagnosticCode::InvalidArgumentType,
+                                arg.range,
+                                message,
+                            );
+                        } else {
+                            self.checker.diagnostics.error(
+                                DiagnosticCode::InvalidArgumentType,
+                                arg.range,
+                                message,
+                            );
+                        }
                     }
                     if self.checker.diagnostics.error_count() == errors_before {
                         self.checker
@@ -463,11 +477,25 @@ impl<'a, 'b> CallChecker<'a, 'b> {
                             );
                         }
                     } else {
-                        self.checker.diagnostics.error(
-                            DiagnosticCode::InvalidArgumentType,
-                            arg.range,
-                            self.invalid_argument_type_message(param, arg_type),
-                        );
+                        let message = self.invalid_argument_type_message(param, arg_type);
+                        if self
+                            .checker
+                            .is_integer_bit_string_binding(param.type_id, arg_type)
+                        {
+                            // CODESYS narrows integer/bit-string call
+                            // arguments with a warning (DEV-026).
+                            self.checker.diagnostics.warning(
+                                DiagnosticCode::InvalidArgumentType,
+                                arg.range,
+                                message,
+                            );
+                        } else {
+                            self.checker.diagnostics.error(
+                                DiagnosticCode::InvalidArgumentType,
+                                arg.range,
+                                message,
+                            );
+                        }
                     }
                     if self.checker.diagnostics.error_count() == errors_before {
                         self.checker
