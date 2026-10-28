@@ -142,6 +142,12 @@ impl<'a> TypeChecker<'a> {
         if self.is_generic_type(target) || self.is_generic_type(source) {
             return;
         }
+        // A derived DUT assigned or passed into its own ancestor is a
+        // well-defined base-part-copy upcast (types_compatible accepts it);
+        // it is not the fidelity-loss situation W005 exists to surface.
+        if self.is_ancestor_struct_conversion(target, source) {
+            return;
+        }
 
         self.diagnostics.warning(
             DiagnosticCode::ImplicitConversion,
@@ -152,6 +158,29 @@ impl<'a> TypeChecker<'a> {
                 self.type_name(target)
             ),
         );
+    }
+
+    /// True when `source` is a DUT whose EXTENDS chain (transitively)
+    /// reaches `target`: a derived -> ancestor struct conversion is a
+    /// well-defined base-part-copy upcast (CODESYS-silent by vendor
+    /// convention) and does not warrant the fidelity warning.
+    fn is_ancestor_struct_conversion(&self, target: TypeId, source: TypeId) -> bool {
+        let (
+            Some(Type::Struct {
+                name: source_name, ..
+            }),
+            Some(Type::Struct {
+                name: target_name, ..
+            }),
+        ) = (
+            self.symbols.type_by_id(source),
+            self.symbols.type_by_id(target),
+        )
+        else {
+            return false;
+        };
+        source_name == target_name
+            || self.struct_inherits_from(source_name.as_str(), target_name.as_str())
     }
 
     fn is_string_family_implicit_ok(&self, target: TypeId, source: TypeId) -> bool {
