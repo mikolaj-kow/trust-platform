@@ -943,8 +943,7 @@ END_PROGRAM
 
 #[test]
 fn test_infix_ampersand_matches_and_for_bit_strings() {
-    let errors = check_errors(
-        r#"
+    let source = r#"
 PROGRAM Test
     VAR
         w : WORD := WORD#16#FF00;
@@ -952,20 +951,23 @@ PROGRAM Test
     END_VAR
     w := w & dw;
 END_PROGRAM
-"#,
+"#;
+    // '&' widens like AND (WORD & DWORD -> DWORD); the narrowing store is a
+    // DEV-026 warning, not an error — the shrink is not silent.
+    assert!(
+        check_errors(source).is_empty(),
+        "'&' must widen like AND with no errors"
     );
     assert_eq!(
-        errors,
+        check_warnings(source),
         vec![DiagnosticCode::IncompatibleAssignment],
-        "Expected '&' to widen like AND and only fail on the narrowing assignment, got: {:?}",
-        errors
+        "the narrowing store must still warn"
     );
 }
 
 #[test]
 fn test_infix_bitwise_mixed_width_results_cannot_shrink_silently() {
-    let errors = check_errors(
-        r#"
+    let source = r#"
 PROGRAM Test
     VAR
         w : WORD := WORD#16#FF00;
@@ -973,12 +975,14 @@ PROGRAM Test
     END_VAR
     w := w AND dw;
 END_PROGRAM
-"#,
+"#;
+    assert!(
+        check_errors(source).is_empty(),
+        "the mixed-width AND must only warn on the narrowing store"
     );
     assert_eq!(
-        errors,
+        check_warnings(source),
         vec![DiagnosticCode::IncompatibleAssignment],
-        "Expected only the narrowing assignment error, got: {:?}",
-        errors
+        "the narrowing store must still warn — nothing shrinks silently"
     );
 }

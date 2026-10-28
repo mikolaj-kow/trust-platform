@@ -126,10 +126,18 @@ fn expression_operator_rejects_out_of_range_contextual_unsigned_literal() {
 }
 
 #[test]
-fn expression_operator_rejects_typed_cross_width_narrowing_result() {
-    check_has_error(
-        "PROGRAM P\nVAR a : INT; b : DINT; r : INT; END_VAR\nr := a + b;\nEND_PROGRAM",
-        DiagnosticCode::IncompatibleAssignment,
+fn expression_operator_warns_on_typed_cross_width_narrowing_result() {
+    // DEV-026: the typed arithmetic result widens (INT + DINT -> DINT);
+    // the narrowing store warns instead of erroring.
+    let source = "PROGRAM P\nVAR a : INT; b : DINT; r : INT; END_VAR\nr := a + b;\nEND_PROGRAM";
+    assert!(
+        check_errors(source).is_empty(),
+        "the widened arithmetic must carry no error"
+    );
+    assert_eq!(
+        check_warnings(source),
+        vec![DiagnosticCode::IncompatibleAssignment],
+        "the narrowing store must still warn"
     );
 }
 
