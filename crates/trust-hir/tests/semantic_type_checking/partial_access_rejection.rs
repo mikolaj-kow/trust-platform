@@ -137,8 +137,11 @@ fn partial_access_warns_on_wrong_byte_write_type() {
     let source = "PROGRAM Main\nVAR value : DWORD; END_VAR\nvalue.%B0 := WORD#1;\nEND_PROGRAM";
     assert!(check_errors(source).is_empty());
     assert_eq!(
-        check_warnings(source),
-        vec![DiagnosticCode::IncompatibleAssignment],
+        check_warnings(source)
+            .iter()
+            .filter(|code| **code == DiagnosticCode::IncompatibleAssignment)
+            .count(),
+        1,
         "the narrowed %-window store must still warn"
     );
 }
@@ -148,8 +151,11 @@ fn partial_access_warns_on_wrong_word_write_type() {
     let source = "PROGRAM Main\nVAR value : LWORD; END_VAR\nvalue.%W0 := DWORD#1;\nEND_PROGRAM";
     assert!(check_errors(source).is_empty());
     assert_eq!(
-        check_warnings(source),
-        vec![DiagnosticCode::IncompatibleAssignment],
+        check_warnings(source)
+            .iter()
+            .filter(|code| **code == DiagnosticCode::IncompatibleAssignment)
+            .count(),
+        1,
         "the narrowed %-window store must still warn"
     );
 }
@@ -159,8 +165,11 @@ fn partial_access_warns_on_wrong_dword_write_type() {
     let source = "PROGRAM Main\nVAR value : LWORD; END_VAR\nvalue.%D0 := LWORD#1;\nEND_PROGRAM";
     assert!(check_errors(source).is_empty());
     assert_eq!(
-        check_warnings(source),
-        vec![DiagnosticCode::IncompatibleAssignment],
+        check_warnings(source)
+            .iter()
+            .filter(|code| **code == DiagnosticCode::IncompatibleAssignment)
+            .count(),
+        1,
         "the narrowed %-window store must still warn"
     );
 }

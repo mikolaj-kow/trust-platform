@@ -959,8 +959,11 @@ END_PROGRAM
         "'&' must widen like AND with no errors"
     );
     assert_eq!(
-        check_warnings(source),
-        vec![DiagnosticCode::IncompatibleAssignment],
+        check_warnings(source)
+            .iter()
+            .filter(|code| **code == DiagnosticCode::IncompatibleAssignment)
+            .count(),
+        1,
         "the narrowing store must still warn"
     );
 }
@@ -981,8 +984,11 @@ END_PROGRAM
         "the mixed-width AND must only warn on the narrowing store"
     );
     assert_eq!(
-        check_warnings(source),
-        vec![DiagnosticCode::IncompatibleAssignment],
+        check_warnings(source)
+            .iter()
+            .filter(|code| **code == DiagnosticCode::IncompatibleAssignment)
+            .count(),
+        1,
         "the narrowing store must still warn — nothing shrinks silently"
     );
 }

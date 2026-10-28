@@ -6,6 +6,13 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+- Comparisons and bit-string arithmetic match CODESYS: signed/unsigned
+  integer pairs, integer/bit-string pairs, and two bit-string operands in
+  `+ - * /` are admitted and evaluate through a common magnitude (the
+  runtime promotes; bit-string results carry the wider width and wrap).
+  MOD on bit-strings, mixed integer/bit-string arithmetic, and
+  integer/REAL accuracy-loss combinations stay rejected; see
+  `IEC_DEVIATIONS.md` (DEV-027).
 - Integer/bit-string narrowing (assignments and call arguments) is now a
   warning instead of an error, matching the CODESYS compiler warning; and
   `SIZEOF` yields its natural unsigned magnitude (`UDINT`) so vendor

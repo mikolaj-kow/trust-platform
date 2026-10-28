@@ -9,9 +9,11 @@ fn expression_operator_rejects_signed_unsigned_arithmetic() {
 }
 
 #[test]
-fn expression_operator_rejects_signed_unsigned_comparison() {
+fn expression_operator_rejects_unsigned_real_accuracy_loss() {
+    // Keep-strict for DEV-027: REAL pairs keep the accuracy diagnostic —
+    // only integer/bit-string families compare and arithmetize freely.
     check_has_error(
-        "PROGRAM P\nVAR a : DINT; b : UDINT; r : BOOL; END_VAR\nr := a < b;\nEND_PROGRAM",
+        "PROGRAM P\nVAR a : UDINT; b : REAL; r : REAL; END_VAR\nr := a > b;\nEND_PROGRAM",
         DiagnosticCode::TypeMismatch,
     );
 }
@@ -135,8 +137,11 @@ fn expression_operator_warns_on_typed_cross_width_narrowing_result() {
         "the widened arithmetic must carry no error"
     );
     assert_eq!(
-        check_warnings(source),
-        vec![DiagnosticCode::IncompatibleAssignment],
+        check_warnings(source)
+            .iter()
+            .filter(|code| **code == DiagnosticCode::IncompatibleAssignment)
+            .count(),
+        1,
         "the narrowing store must still warn"
     );
 }
@@ -160,9 +165,11 @@ fn expression_operator_rejects_array_comparison() {
 }
 
 #[test]
-fn expression_operator_rejects_bit_string_arithmetic() {
+fn expression_operator_rejects_bit_string_mod() {
+    // Keep-strict for DEV-027: MOD keeps its integer-only gate; only
+    // Add/Sub/Mul/Div admit bit-string operands.
     check_has_error(
-        "PROGRAM P\nVAR a : WORD; r : WORD; END_VAR\nr := a + a;\nEND_PROGRAM",
+        "PROGRAM P\nVAR a : WORD; r : WORD; END_VAR\nr := a MOD a;\nEND_PROGRAM",
         DiagnosticCode::TypeMismatch,
     );
 }

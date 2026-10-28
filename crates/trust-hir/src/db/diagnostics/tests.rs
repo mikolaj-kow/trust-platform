@@ -144,19 +144,18 @@ fn integer_subrange_takes_its_base_type_then_checks_its_bounds() {
 
 #[test]
 fn comparison_literal_takes_the_other_operand_type_in_analysis() {
+    // A representable literal contextualizes to UDINT and compares clean.
     let accepted = error_messages(
         "PROGRAM Main\nVAR d : UDINT; r : BOOL; END_VAR\nr := d > 3000000000;\nEND_PROGRAM",
     );
     assert_eq!(accepted, Vec::<String>::new());
+    // DEV-027: a literal beyond the UDINT range keeps its own integer type
+    // and the cross-width comparison admits silently (the mathematical
+    // result is exact; the literal's own range is its own business).
     let rejected = error_messages(
         "PROGRAM Main\nVAR d : UDINT; r : BOOL; END_VAR\nr := d > 5000000000;\nEND_PROGRAM",
     );
-    assert!(
-        rejected
-            .iter()
-            .any(|message| message == "numeric operands have no accuracy-preserving common type"),
-        "{rejected:?}"
-    );
+    assert_eq!(rejected, Vec::<String>::new());
 }
 
 #[test]

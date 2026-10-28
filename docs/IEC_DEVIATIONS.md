@@ -498,3 +498,38 @@ re-check them against this rule when touched.
 - Mitigation: the demotion is type-class-scoped, not blanket — mixed
   (non-integer) mismatches keep their errors, and each narrowed binding
   still produces one warning so recurrence is loud.
+
+## 2026-10-28 - Mixed-family comparisons and bit-string arithmetic
+
+- ID: DEV-027
+- Area: comparison operators (`= <> < <= > >=`) over mixed integer
+  families, and `+ - * /` over bit-string operands.
+- Normative IEC requirement: IEC 61131-3 Ed.3 `§6.6.1.6` admits implicit
+  operations only where value and accuracy are preserved; signed/unsigned
+  pairs have no accuracy-preserving common type in the reviewed matrix,
+  and bit-strings (`ANY_BIT` minus `BOOL`) are not `ANY_NUM` operands at
+  all, so `DWORD - DWORD` and `INT < UINT` are not defined operations.
+  The standard text was unavailable on the authoring machine; the clause
+  mirrors the citation style already used in `docs/specs/05-expressions.md`.
+- truST behavior and conflict: comparisons over any mix of
+  signed/unsigned/bit-string integer operands are admitted and evaluate
+  through one mathematical magnitude (i128 promotion at runtime); two
+  bit-string operands participate in `+ - * /` as unsigned magnitudes
+  whose result carries the wider operand's width and wraps like the
+  vendor toolchain (`Div`/`Mod` keep the unsigned zero-divisor faults;
+  `Pow` stays rejected). This matches CODESYS, which compiles the
+  downstream tree's `UINT` vs division-result comparisons and
+  `DWORD - DWORD` energy-meter arithmetic silently. The strict reading
+  rejects both families (62 downstream sites).
+- Impact: mixed-sign comparisons, integer/bit-string comparisons, and
+  bit-string arithmetic pass the compile gate and execute correctly in
+  the runtime (the VM promotes instead of faulting); MOD keeps its
+  integer-only gate, mixed integer/bit-string *arithmetic* (`INT +
+  UINT`, `WORD + INT`), and integer/REAL accuracy-loss combinations keep
+  their diagnostics.
+- Mitigation: admission is silent (matches the vendor toolchain and the
+  existing logical-operator precedent) but type-class-scoped — BOOL and
+  non-scalar pairs, REAL accuracy-loss pairs, and mixed-family
+  arithmetic keep their errors; the runtime promotion lives in the
+  compare/arithmetic paths, leaving the value-helper rejection pins
+  intact.
