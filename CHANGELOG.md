@@ -6,6 +6,13 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+- Standard conversions: vendor-extension entries match the CODESYS/TwinCAT
+  toolchain — `TO_STRING`/`*_TO_STRING` over enumerated values (variant
+  name), `BOOL` (`'TRUE'`/`'FALSE'`), `TIME`/`LTIME` (`T#`/`LT#` text), and
+  same-family strings (identity); `TIME_TO_<int>`/`LTIME_TO_<int>` and
+  `TOD_TO_DWORD`/`LTOD_TO_DWORD` duration magnitudes. Implemented in the
+  compiler accept table and the runtime conversion dispatch; see
+  `IEC_DEVIATIONS.md` (DEV-025).
 - Call binding: `VAR_IN_OUT` strings bind across declared capacities (same
   string family only), matching CODESYS and the vendor buffer idiom of a
   `STRING(1)` formal whose real capacity arrives in a separate size argument
