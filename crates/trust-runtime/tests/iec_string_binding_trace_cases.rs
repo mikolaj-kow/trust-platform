@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use trust_hir::db::{Database, FileId, SemanticDatabase, SourceDatabase};
 use trust_hir::diagnostics::{DiagnosticCode, DiagnosticSeverity};
-use trust_runtime::harness::{CompileSession, TestHarness};
+use trust_runtime::harness::TestHarness;
 use trust_runtime::value::Value;
 use verification_cases::{
     run_case_file, CaseExecution, CaseRecord, CaseResult, RunConfig, StateProbe, StateSnapshot,
@@ -80,16 +80,16 @@ fn run_string_case(
             &[("observed_length", ExpectedValue::DInt(3))],
         ),
         "FB_INOUT_MISMATCH_STRING" => {
-            compile_reject(probe, FB_INOUT_MISMATCH_STRING, "error[E205]:")
+            // DEV-024: the wider caller string binds; the trace runs the
+            // call end to end instead of expecting a rejection.
+            run_runtime(probe, FB_INOUT_MISMATCH_STRING, &[])
         }
         "FB_OUTPUT_COPYBACK_WSTRING" => run_runtime(
             probe,
             FB_OUTPUT_COPYBACK_WSTRING,
             &[("narrow", ExpectedValue::WString("ABC"))],
         ),
-        "FB_INOUT_MISMATCH_WSTRING" => {
-            compile_reject(probe, FB_INOUT_MISMATCH_WSTRING, "error[E205]:")
-        }
+        "FB_INOUT_MISMATCH_WSTRING" => run_runtime(probe, FB_INOUT_MISMATCH_WSTRING, &[]),
         "UNICODE_LITERAL_BOUND" => run_runtime(
             probe,
             UNICODE_LITERAL_BOUND,
@@ -127,7 +127,10 @@ fn run_string_case(
                 ("shared", ExpectedValue::String("ABZ")),
             ],
         ),
-        "FUNCTION_INOUT_MISMATCH" => compile_reject(probe, FUNCTION_INOUT_MISMATCH, "error[E205]:"),
+        "FUNCTION_INOUT_MISMATCH" => {
+            // DEV-024: binds and runs; no rejection expected.
+            run_runtime(probe, FUNCTION_INOUT_MISMATCH, &[])
+        }
         "NESTED_FIELD_COPYBACK" => run_runtime(
             probe,
             NESTED_FIELD_COPYBACK,
@@ -193,18 +196,6 @@ fn run_runtime(
     (!mismatches.is_empty()).then(|| mismatches.join("; "))
 }
 
-fn compile_reject(probe: &mut StringBindingProbe, source: &str, expected: &str) -> Option<String> {
-    match CompileSession::from_source(source).build_runtime() {
-        Ok(_) => Some(format!("fixture compiled but expected {expected}")),
-        Err(error) => {
-            let rendered = error.to_string();
-            probe.diagnostics.push(rendered.clone());
-            (!rendered.contains(expected))
-                .then(|| format!("expected rejection containing {expected:?}, got {rendered}"))
-        }
-    }
-}
-
 fn hir_errors(source: &str) -> Vec<DiagnosticCode> {
     let mut db = Database::new();
     let file = FileId(0);
@@ -223,13 +214,12 @@ fn hir_equal_alias(probe: &mut StringBindingProbe) -> Option<String> {
 }
 
 fn hir_inout_mismatch(probe: &mut StringBindingProbe) -> Option<String> {
+    // DEV-024: the wider/unbounded caller strings bind — the trace asserts
+    // the binding carries no errors (the cross-family trace keeps its own
+    // rejection expectations).
     let errors = hir_errors(HIR_INOUT_MISMATCH);
     probe.diagnostics = errors.iter().map(|code| format!("{code:?}")).collect();
-    let count = errors
-        .iter()
-        .filter(|code| **code == DiagnosticCode::InvalidArgumentType)
-        .count();
-    (count != 3).then(|| format!("expected 3 InvalidArgumentType errors, got {errors:?}"))
+    (!errors.is_empty()).then(|| format!("in-out capacity mismatch binding errors: {errors:?}"))
 }
 
 fn hir_cross_family(probe: &mut StringBindingProbe) -> Option<String> {
@@ -269,15 +259,9 @@ fn imported_capacity(probe: &mut StringBindingProbe, mismatch: bool) -> Option<S
         .map(|diagnostic| diagnostic.code)
         .collect::<Vec<_>>();
     probe.diagnostics = errors.iter().map(|code| format!("{code:?}")).collect();
-    if mismatch {
-        let count = errors
-            .iter()
-            .filter(|code| **code == DiagnosticCode::InvalidArgumentType)
-            .count();
-        (count != 1).then(|| format!("expected imported-capacity rejection, got {errors:?}"))
-    } else {
-        (!errors.is_empty()).then(|| format!("equal imported capacity errors: {errors:?}"))
-    }
+    // DEV-024: imported constant capacities no longer gate in-out binding —
+    // the mismatch call binds exactly like the equal-capacity one.
+    (!errors.is_empty()).then(|| format!("imported capacity mismatch errors: {errors:?}"))
 }
 
 #[derive(Clone, Copy)]
