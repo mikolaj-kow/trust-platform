@@ -426,6 +426,8 @@ END_PROGRAM
 
 #[test]
 fn expression_lowering_contract_out_of_range_contextual_literal_is_rejected() {
+    // DEV-026: the narrowing assignment itself demotes to a warning, so the
+    // out-of-range literal is the compile error the harness reports.
     let error = compile_error(
         r#"
 PROGRAM Main
@@ -436,7 +438,10 @@ small := 128;
 END_PROGRAM
 "#,
     );
-    assert!(error.contains("cannot assign 'INT' to 'SINT'"), "{error}");
+    assert!(
+        error.contains("integer literal 128 is outside the range of SINT"),
+        "{error}"
+    );
 }
 
 #[test]
