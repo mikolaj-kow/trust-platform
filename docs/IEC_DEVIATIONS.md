@@ -498,6 +498,13 @@ re-check them against this rule when touched.
 - Mitigation: the demotion is type-class-scoped, not blanket — mixed
   (non-integer) mismatches keep their errors, and each narrowed binding
   still produces one warning so recurrence is loud.
+- Open note (2026-10-29): the narrowed store's runtime write semantics are
+  build-configuration dependent — the `hir`-feature runtime store policy
+  range-rejects an out-of-range narrowed store (caller variable keeps its
+  prior value, per the 2026-07-05 subrange write-enforcement decision),
+  while the non-hir fallback wraps. Which semantics is canonical for
+  narrowed stores is a spec 10 owner decision; until then downstream pins
+  assert only the compile contract.
 
 ## 2026-10-28 - Mixed-family comparisons and bit-string arithmetic
 

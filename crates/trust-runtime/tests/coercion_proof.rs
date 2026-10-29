@@ -133,11 +133,13 @@ END_PROGRAM
 }
 
 #[test]
-fn narrowing_assignment_compiles_with_truncation_per_dev026() {
+fn narrowing_assignment_compiles_per_dev026() {
     // IEC_DEVIATIONS DEV-026: an integer narrowing assignment compiles with
-    // a compiler warning instead of being rejected; the store truncates to
-    // the target's width (70000 as INT is 4464), which is why the warning
-    // must stay loud.
+    // a compiler warning instead of being rejected. This pin asserts only
+    // that compile contract and a fault-free cycle: the narrowed store's
+    // runtime write semantics (wrap vs range-checked reject-and-keep) are
+    // build-configuration dependent today (see DEV-026's open note) and
+    // must not be pinned accidentally here.
     let source = r#"
 PROGRAM Main
 VAR
@@ -150,5 +152,4 @@ END_PROGRAM
     let mut harness = TestHarness::from_source(source)
         .expect("narrowing assignment compiles under the DEV-026 warning contract");
     harness.cycle();
-    assert_eq!(harness.get_output("small"), Some(Value::Int(4_464)));
 }
