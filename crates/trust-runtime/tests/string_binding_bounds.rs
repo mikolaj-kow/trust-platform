@@ -1,4 +1,4 @@
-use trust_runtime::harness::{CompileSession, TestHarness};
+use trust_runtime::harness::TestHarness;
 use trust_runtime::value::Value;
 
 #[test]
@@ -152,7 +152,11 @@ END_PROGRAM
 }
 
 #[test]
-fn function_block_inout_rejects_mismatched_string_capacity() {
+fn function_block_inout_binds_mismatched_string_capacity_per_dev024() {
+    // IEC_DEVIATIONS DEV-024: in-out strings bind across declared
+    // capacities (CODESYS parity, vendor buffer idiom). The runtime
+    // reference-binding capacity policy is a spec 10 open question, so the
+    // pin asserts the compile contract and a fault-free cycle only.
     let source = r#"
 FUNCTION_BLOCK Observe
 VAR_IN_OUT
@@ -169,13 +173,9 @@ fb(text := caller_text);
 END_PROGRAM
 "#;
 
-    let error = CompileSession::from_source(source)
-        .build_runtime()
-        .expect_err("STRING[20] must not bind implicitly to STRING[5] VAR_IN_OUT");
-    assert!(
-        error.to_string().contains("error[E205]:"),
-        "expected the VAR_IN_OUT type rejection category, got {error}"
-    );
+    let mut harness = TestHarness::from_source(source)
+        .expect("capacity-mismatch in-out binding compiles under DEV-024");
+    harness.cycle();
 }
 
 #[test]
@@ -212,7 +212,8 @@ END_PROGRAM
 }
 
 #[test]
-fn function_block_inout_rejects_mismatched_wstring_capacity() {
+fn function_block_inout_binds_mismatched_wstring_capacity_per_dev024() {
+    // DEV-024 compile contract; see the STRING variant's note.
     let source = r#"
 FUNCTION_BLOCK Observe
 VAR_IN_OUT
@@ -229,13 +230,9 @@ fb(text := caller_text);
 END_PROGRAM
 "#;
 
-    let error = CompileSession::from_source(source)
-        .build_runtime()
-        .expect_err("WSTRING[6] must not bind implicitly to WSTRING[3] VAR_IN_OUT");
-    assert!(
-        error.to_string().contains("error[E205]:"),
-        "expected the VAR_IN_OUT type rejection category, got {error}"
-    );
+    let mut harness = TestHarness::from_source(source)
+        .expect("capacity-mismatch in-out binding compiles under DEV-024");
+    harness.cycle();
 }
 
 #[test]
@@ -403,7 +400,8 @@ END_PROGRAM
 }
 
 #[test]
-fn function_inout_rejects_mismatched_string_capacity() {
+fn function_inout_binds_mismatched_string_capacity_per_dev024() {
+    // DEV-024 compile contract; see the STRING variant's note.
     let source = r#"
 FUNCTION ObserveText : BOOL
 VAR_IN_OUT
@@ -421,13 +419,9 @@ accepted := ObserveText(caller_text);
 END_PROGRAM
 "#;
 
-    let error = CompileSession::from_source(source)
-        .build_runtime()
-        .expect_err("STRING[20] must not bind implicitly to function STRING[5] VAR_IN_OUT");
-    assert!(
-        error.to_string().contains("error[E205]:"),
-        "expected the VAR_IN_OUT type rejection category, got {error}"
-    );
+    let mut harness = TestHarness::from_source(source)
+        .expect("capacity-mismatch in-out binding compiles under DEV-024");
+    harness.cycle();
 }
 
 #[test]

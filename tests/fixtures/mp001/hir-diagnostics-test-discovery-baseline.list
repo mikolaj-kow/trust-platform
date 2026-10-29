@@ -79,7 +79,7 @@ db::diagnostics::tests::lint_initializer_above_i64_maximum_is_a_range_error: tes
 db::diagnostics::tests::lint_minimum_literal_initializes_typed_and_untyped_without_errors: test
 db::diagnostics::tests::literal_above_lint_maximum_is_rejected_by_assignment_analysis: test
 db::diagnostics::tests::literal_one_past_an_integer_bound_is_reported_once: test
-db::diagnostics::tests::narrow_literal_assignment_reports_one_error: test
+db::diagnostics::tests::narrow_literal_assignment_reports_range_once_and_narrowing_warning: test
 db::diagnostics::tests::return_value_is_checked_against_its_subrange_bounds: test
 db::diagnostics::tests::test_database_basic: test
 db::diagnostics::tests::test_expr_id_type_of: test

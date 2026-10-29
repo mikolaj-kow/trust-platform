@@ -100,6 +100,27 @@ fn expression_operator_accepts_unsigned_numeric_comparisons() {
 }
 
 #[test]
+fn expression_operator_accepts_mixed_sign_comparisons() {
+    // CODESYS parity (IEC_DEVIATIONS DEV-027): signed and unsigned
+    // integers compare through a common magnitude; the runtime promotes
+    // to i128 so the mathematical result holds across widths.
+    check_no_errors("PROGRAM P\nVAR a : DINT; b : UDINT; c : INT; d : UINT; r : BOOL; END_VAR\nr := a < b; r := a = b; r := b >= a; r := c <> d; r := c <= d;\nEND_PROGRAM");
+}
+
+#[test]
+fn expression_operator_accepts_integer_bit_string_comparisons() {
+    check_no_errors("PROGRAM P\nVAR a : DINT; b : BYTE; c : WORD; d : DWORD; r : BOOL; END_VAR\nr := a = b; r := a < d; r := b < c; r := c >= d;\nEND_PROGRAM");
+}
+
+#[test]
+fn expression_operator_accepts_bit_string_arithmetic() {
+    // CODESYS parity (IEC_DEVIATIONS DEV-027): bit-strings participate in
+    // Add/Sub/Mul/Div as unsigned magnitudes; the result carries the wider
+    // operand's width, so the same-width and widening stores are clean.
+    check_no_errors("PROGRAM P\nVAR a : WORD; r : WORD; wide : DWORD; END_VAR\nr := a + a; wide := a + wide;\nEND_PROGRAM");
+}
+
+#[test]
 fn expression_operator_accepts_narrow_string_comparisons() {
     check_no_errors("PROGRAM P\nVAR a : STRING[8]; b : STRING[16]; r : BOOL; END_VAR\nr := a < b; r := a = b; r := a <> b;\nEND_PROGRAM");
 }

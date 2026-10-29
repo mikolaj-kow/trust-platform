@@ -3,7 +3,7 @@ use std::fmt;
 use super::storage_context::EvaluationTypes;
 use crate::error::RuntimeError;
 use crate::program_model::ops::{apply_binary, apply_unary};
-use crate::program_model::Expr;
+use crate::program_model::{BinaryOp, Expr};
 use crate::value::{
     size_of_type_with_abi, ArrayValue, DateTimeProfile, SizeOfError, StorageAbi, Value,
 };
@@ -103,6 +103,15 @@ fn eval_const_expr_with_types(
         Expr::Binary { op, left, right } => {
             let left = eval_const_expr_with_types(left, profile, registry, resolve_name)?;
             let right = eval_const_expr_with_types(right, profile, registry, resolve_name)?;
+            // CODESYS-parity constant evaluation (IEC_DEVIATIONS DEV-027):
+            // mixed-sign integer constants evaluate exactly in i128 —
+            // compile-time math is exact, so `SIZEOF(x) - 1` with an
+            // unsigned SIZEOF cannot fault. Same-sign pairs and every
+            // non-integer pair keep the shared apply_binary contract (the
+            // VM execution path is unchanged).
+            if let Some(result) = eval_mixed_sign_integer_binary(*op, &left, &right)? {
+                return Ok(result);
+            }
             Ok(apply_binary(*op, left, right, profile)?)
         }
         Expr::SizeOf(crate::program_model::SizeOfTarget::Type(type_id)) => {
@@ -113,6 +122,88 @@ fn eval_const_expr_with_types(
             Ok(Value::DInt(size))
         }
         _ => Err(ConstExprError::UnsupportedExpr),
+    }
+}
+
+/// CODESYS-parity constant arithmetic (IEC_DEVIATIONS DEV-027): a true
+/// mixed signed×unsigned integer pair evaluates exactly in i128 and
+/// materializes as LINT (negative) or ULINT (non-negative), so bounds and
+/// initializers like `SIZEOF(x) - 1` keep working when SIZEOF carries its
+/// natural unsigned magnitude. Returns `None` for same-family pairs and
+/// non-integers, which keep the shared `apply_binary` contract.
+fn eval_mixed_sign_integer_binary(
+    op: BinaryOp,
+    left: &Value,
+    right: &Value,
+) -> Result<Option<Value>, RuntimeError> {
+    fn signedness(value: &Value) -> Option<bool> {
+        // Some(true) = signed integer, Some(false) = unsigned integer.
+        match value {
+            Value::SInt(_) | Value::Int(_) | Value::DInt(_) | Value::LInt(_) => Some(true),
+            Value::USInt(_)
+            | Value::UInt(_)
+            | Value::UDInt(_)
+            | Value::ULInt(_)
+            | Value::Byte(_)
+            | Value::Word(_)
+            | Value::DWord(_)
+            | Value::LWord(_) => Some(false),
+            _ => None,
+        }
+    }
+    fn magnitude(value: &Value) -> Option<i128> {
+        match value {
+            Value::SInt(v) => Some(i128::from(*v)),
+            Value::Int(v) => Some(i128::from(*v)),
+            Value::DInt(v) => Some(i128::from(*v)),
+            Value::LInt(v) => Some(i128::from(*v)),
+            Value::USInt(v) => Some(i128::from(*v)),
+            Value::UInt(v) => Some(i128::from(*v)),
+            Value::UDInt(v) => Some(i128::from(*v)),
+            Value::ULInt(v) => Some(i128::from(*v)),
+            Value::Byte(v) => Some(i128::from(*v)),
+            Value::Word(v) => Some(i128::from(*v)),
+            Value::DWord(v) => Some(i128::from(*v)),
+            Value::LWord(v) => Some(i128::from(*v)),
+            _ => None,
+        }
+    }
+    let (Some(left_is_signed), Some(right_is_signed)) = (signedness(left), signedness(right))
+    else {
+        return Ok(None);
+    };
+    if left_is_signed == right_is_signed {
+        return Ok(None);
+    }
+    let (Some(a), Some(b)) = (magnitude(left), magnitude(right)) else {
+        return Ok(None);
+    };
+    let result = match op {
+        BinaryOp::Add => a.checked_add(b).ok_or(RuntimeError::Overflow)?,
+        BinaryOp::Sub => a.checked_sub(b).ok_or(RuntimeError::Overflow)?,
+        BinaryOp::Mul => a.checked_mul(b).ok_or(RuntimeError::Overflow)?,
+        BinaryOp::Div => {
+            if b == 0 {
+                return Err(RuntimeError::DivisionByZero);
+            }
+            a.checked_div(b).ok_or(RuntimeError::Overflow)?
+        }
+        BinaryOp::Mod => {
+            if b == 0 {
+                return Err(RuntimeError::ModuloByZero);
+            }
+            a.checked_rem(b).ok_or(RuntimeError::Overflow)?
+        }
+        _ => return Ok(None),
+    };
+    if result < 0 {
+        i64::try_from(result)
+            .map(|value| Some(Value::LInt(value)))
+            .map_err(|_| RuntimeError::Overflow)
+    } else {
+        u64::try_from(result)
+            .map(|value| Some(Value::ULInt(value)))
+            .map_err(|_| RuntimeError::Overflow)
     }
 }
 

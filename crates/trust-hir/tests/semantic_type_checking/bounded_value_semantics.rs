@@ -223,8 +223,7 @@ END_PROGRAM
 
 #[test]
 fn cross_family_and_non_numeric_implicit_assignments_are_rejected() {
-    let errors = check_errors(
-        r#"
+    let source = r#"
 PROGRAM Main
 VAR
     signed_value : DINT;
@@ -241,16 +240,27 @@ flag := signed_value;
 text := wide_text;
 wide_text := text;
 END_PROGRAM
-"#,
-    );
+"#;
+    let errors = check_errors(source);
 
+    // DEV-026: the DINT<-UDINT and UDINT<-DINT pairs are integer-narrowing
+    // bindings and demoted to warnings; the four true cross-family pairs
+    // (REAL<-BOOL, BOOL<-DINT, STRING<-WSTRING, WSTRING<-STRING) stay errors.
     assert_eq!(
         errors
             .iter()
             .filter(|code| **code == DiagnosticCode::IncompatibleAssignment)
             .count(),
-        6,
-        "implicit conversion must stay within the reviewed numeric or string family: {errors:?}"
+        4,
+        "cross-family implicit assignment must stay rejected: {errors:?}"
+    );
+    let narrowing = check_warnings(source)
+        .iter()
+        .filter(|code| **code == DiagnosticCode::IncompatibleAssignment)
+        .count();
+    assert_eq!(
+        narrowing, 2,
+        "the integer narrowing pairs must still warn — nothing shrinks silently"
     );
 }
 

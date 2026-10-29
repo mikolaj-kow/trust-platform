@@ -52,6 +52,14 @@ pub(super) fn is_conversion_allowed(src: ConversionType, dst: ConversionType) ->
         return true;
     }
 
+    // CODESYS TO_STRING parity: an enumerated value converts to its member
+    // name string (IEC_DEVIATIONS DEV-025).
+    if src == ConversionType::Enum
+        && matches!(dst, ConversionType::String | ConversionType::WString)
+    {
+        return true;
+    }
+
     if matches!(
         src,
         ConversionType::Byte | ConversionType::Word | ConversionType::DWord | ConversionType::LWord
@@ -126,6 +134,14 @@ pub(super) fn is_conversion_allowed(src: ConversionType, dst: ConversionType) ->
     if src == ConversionType::DWord && dst == ConversionType::Time {
         return true;
     }
+    // CODESYS converts durations to any integer (ms magnitude) and
+    // time-of-day to its ms-of-day magnitude (IEC_DEVIATIONS DEV-025).
+    if matches!(src, ConversionType::Time | ConversionType::LTime) && is_integer_type(dst) {
+        return true;
+    }
+    if matches!(src, ConversionType::Tod | ConversionType::LTod) && dst == ConversionType::DWord {
+        return true;
+    }
     if src == ConversionType::Ldt && dst == ConversionType::Dt {
         return true;
     }
@@ -161,10 +177,13 @@ pub(super) fn is_conversion_allowed(src: ConversionType, dst: ConversionType) ->
         && (is_numeric_type(src)
             || matches!(
                 src,
-                ConversionType::Byte
+                ConversionType::Bool
+                    | ConversionType::Byte
                     | ConversionType::Word
                     | ConversionType::DWord
                     | ConversionType::LWord
+                    | ConversionType::Time
+                    | ConversionType::LTime
             ))
     {
         return true;
@@ -264,6 +283,7 @@ pub(super) fn value_type_id(value: &Value) -> Option<ConversionType> {
         Value::WString(_) => Some(ConversionType::WString),
         Value::Char(_) => Some(ConversionType::Char),
         Value::WChar(_) => Some(ConversionType::WChar),
+        Value::Enum(_) => Some(ConversionType::Enum),
         _ => None,
     }
 }

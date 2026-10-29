@@ -411,3 +411,145 @@ re-check them against this rule when touched.
   into closed enums, cross-enum assignment, and unknown member references
   keep their diagnostics; generic `ANY` matching still does not treat an
   enum as an integer actual beyond this base conversion.
+
+## 2026-10-28 - In-out string binding across declared capacities
+
+- ID: DEV-024
+- Area: `VAR_IN_OUT` parameter binding for `STRING[n]`/`WSTRING[n]` actuals.
+- Normative IEC requirement: IEC 61131-3 Ed.3 requires the actual parameter
+  of a `VAR_IN_OUT` formal to be a variable of the same data type
+  (§6.6.2.2). String capacity is part of a string type, so binding a
+  `STRING[255]` actual to a `STRING[1]` formal is not a same-type binding
+  and the strict reading rejects it. The standard text was unavailable on
+  the authoring machine; the clause number mirrors the citation style
+  already used in `docs/specs/02-data-types.md`.
+- truST behavior and conflict: truST requires only the same string family
+  (`STRING` vs `WSTRING`) and accepts in-out binding across declared
+  capacities, matching CODESYS. CODESYS accepts the vendor buffer idiom — a
+  `STRING(1)` in-out formal (used by every `WagoAppString` function) whose
+  real capacity arrives in a separate size argument
+  (`StrAppend(sBuffer, SIZEOF(sBuffer), sAppendee)`) — so the
+  capacity-strict reading rejects library calls that compile clean in the
+  vendor toolchain.
+- Impact: vendor-library call sites with in-out string formals (the
+  downstream tree carries several hundred `WagoAppString` in-out and size
+  call arguments) now pass the compile gate; the previous
+  capacity-equality rule rejected the same code.
+- Mitigation: nothing is lost at the boundary — the callee still sees the
+  actual variable through the reference and owns the capacity contract
+  through its formal capacity or size argument; the caller's variable keeps
+  its own storage. Cross-family binding and non-string in-out type
+  mismatches keep their diagnostics.
+- Open note (2026-10-29): the compile-side contract is capacity-agnostic,
+  but the runtime's in-out reference binding still width-checks under the
+  `hir`-feature store/binding policy — a cycle that calls through a
+  capacity-mismatched in-out binding faults with `TypeMismatch` there
+  (the non-hir fallback binds). Making the runtime reference binding
+  capacity-agnostic (or documenting the fault as the vendor-parity
+  behavior) is a spec 10 owner decision tracked with DEV-026's narrowed
+  store note; until then downstream trace cases assert the compile
+  contract for capacity-mismatched bindings.
+
+## 2026-10-28 - Vendor conversion extensions: enums, BOOL, durations, strings
+
+- ID: DEV-025
+- Area: typed `*_TO_*`/`TO_*` standard conversion functions.
+- Normative IEC requirement: IEC 61131-3 Ed.3 Tables 22-27 enumerate the
+  typed conversions; enumerated source types appear in no conversion table
+  (`§6.4.4.2` treats an enumeration as a distinct type), `BOOL`/`TIME`
+  string forms are not listed, duration-to-narrow-integer forms exceed the
+  listed `TIME`/`DWORD` pair, and `TOD`/`LTOD` to `DWORD` is not listed.
+  The standard text was unavailable on the authoring machine; the clause
+  numbers mirror the citations already used in
+  `docs/specs/07-standard-functions.md`.
+- truST behavior and conflict: truST accepts — matching the CODESYS /
+  TwinCAT vendor toolchain — (a) `TO_STRING`/`*_TO_STRING` over an
+  enumerated value (yields the variant name), over `BOOL`
+  (`'TRUE'`/`'FALSE'`), over `TIME`/`LTIME` (`T#`/`LT#` duration text),
+  and over any same-family string (identity); (b) `TIME_TO_<int>` /
+  `LTIME_TO_<int>` (ms / ns magnitude truncated into the destination,
+  negative durations overflow); (c) `TOD_TO_DWORD` / `LTOD_TO_DWORD`
+  (ms-of-day magnitude). The strict table reading rejects vendor-project
+  call sites that compile clean in the vendor toolchain (the downstream
+  tree carries ~130 such sites: `TO_STRING(eArea)` families, boot-report
+  `TIME_TO_DINT` chains, `TOD_TO_DWORD` day-phase math).
+- Impact: those call sites pass the compile gate; the runtime conversion
+  dispatch (`trust-runtime-core`) implements the same entries so executed
+  conversions produce the documented values.
+- Mitigation: the extension set is deliberately bounded — time-of-day and
+  date string forms, and REAL-to-bitstring conversions (upstream #127
+  territory), stay rejected; integer destinations wrap rather than fault on
+  magnitude overflow, matching the vendor toolchain's silent narrowing
+  documented in DEV-023's neighborhood.
+
+## 2026-10-28 - Integer/bit-string narrowing bindings as warnings
+
+- ID: DEV-026
+- Area: implicit integer↔bit-string conversions at assignments and call
+  arguments (`E203` "cannot assign", `E205` "expected '<int>' for parameter").
+- Normative IEC requirement: IEC 61131-3 Ed.3 defines implicit assignments
+  only where value and accuracy are preserved (`§6.6.1.6`); a signed to
+  narrower-unsigned store (`SINT` into `BYTE`, `INT` into `BYTE`,
+  `UDINT` into `DWORD`) is not an implicit conversion the standard defines.
+  The standard text was unavailable on the authoring machine; the clause
+  mirrors the citation style already used in `docs/specs/02-data-types.md`.
+- truST behavior and conflict: a binding whose target and source are both
+  integer/bit-string types is diagnosed as a **warning** with the same
+  message and code, not an error — matching CODESYS, which compiles the
+  store silently with a compiler warning. Diagnostics outside that type
+  class (REAL targets, enums, strings, aggregates) stay errors. `SIZEOF`
+  additionally yields its natural unsigned magnitude (`UDINT`) like the
+  vendor toolchain, so vendor `udiSize` parameters bind directly.
+- Impact: vendor-idiom call sites and configuration wiring tables (the
+  downstream tree carries 57 narrowing assignments, 7 port arguments, and
+  ~163 `SIZEOF`-into-`UDINT` sites) pass the compile gate while every
+  narrowed store remains individually visible.
+- Mitigation: the demotion is type-class-scoped, not blanket — mixed
+  (non-integer) mismatches keep their errors, and each narrowed binding
+  still produces one warning so recurrence is loud.
+- Open note (2026-10-29): the narrowed store's runtime write semantics are
+  build-configuration dependent — the `hir`-feature runtime store policy
+  range-rejects an out-of-range narrowed store (caller variable keeps its
+  prior value, per the 2026-07-05 subrange write-enforcement decision),
+  while the non-hir fallback wraps. Which semantics is canonical for
+  narrowed stores is a spec 10 owner decision; until then downstream pins
+  assert only the compile contract.
+
+## 2026-10-28 - Mixed-family comparisons and bit-string arithmetic
+
+- ID: DEV-027
+- Area: comparison operators (`= <> < <= > >=`) over mixed integer
+  families, and `+ - * /` over bit-string operands.
+- Normative IEC requirement: IEC 61131-3 Ed.3 `§6.6.1.6` admits implicit
+  operations only where value and accuracy are preserved; signed/unsigned
+  pairs have no accuracy-preserving common type in the reviewed matrix,
+  and bit-strings (`ANY_BIT` minus `BOOL`) are not `ANY_NUM` operands at
+  all, so `DWORD - DWORD` and `INT < UINT` are not defined operations.
+  The standard text was unavailable on the authoring machine; the clause
+  mirrors the citation style already used in `docs/specs/05-expressions.md`.
+- truST behavior and conflict: comparisons over any mix of
+  signed/unsigned/bit-string integer operands are admitted and evaluate
+  through one mathematical magnitude (i128 promotion at runtime); two
+  bit-string operands participate in `+ - * /` as unsigned magnitudes
+  whose result carries the wider operand's width and wraps like the
+  vendor toolchain (`Div`/`Mod` keep the unsigned zero-divisor faults;
+  `Pow` stays rejected). This matches CODESYS, which compiles the
+  downstream tree's `UINT` vs division-result comparisons and
+  `DWORD - DWORD` energy-meter arithmetic silently. The strict reading
+  rejects both families (62 downstream sites).
+- Impact: mixed-sign comparisons, integer/bit-string comparisons, and
+  bit-string arithmetic pass the compile gate and execute correctly in
+  the runtime (the VM promotes instead of faulting); MOD keeps its
+  integer-only gate, mixed integer/bit-string *arithmetic* (`INT +
+  UINT`, `WORD + INT`), and integer/REAL accuracy-loss combinations keep
+  their diagnostics. The compile-time constant evaluator promotes true
+  mixed signed×unsigned pairs the same way (exact i128 math, materialized
+  LINT/ULINT) so array bounds and initializers like
+  `ARRAY[0..SIZEOF(x)-1]` keep working with an unsigned SIZEOF; the VM
+  execution path keeps its stricter contract.
+- Mitigation: admission is silent (matches the vendor toolchain and the
+  existing logical-operator precedent) but type-class-scoped — BOOL and
+  non-scalar pairs, REAL accuracy-loss pairs, and mixed-family
+  arithmetic keep their errors; the runtime promotion lives in the
+  compare/arithmetic paths, leaving the value-helper rejection pins
+  intact.

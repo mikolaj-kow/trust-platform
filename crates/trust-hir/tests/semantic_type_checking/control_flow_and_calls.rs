@@ -383,7 +383,12 @@ END_PROGRAM
 }
 
 #[test]
-fn string_in_out_requires_equal_declared_capacity() {
+fn string_in_out_binds_across_declared_capacities() {
+    // IEC_DEVIATIONS DEV-024 (supersedes the 2026-07-13 capacity-equality
+    // decision): in-out strings bind across declared capacities, including
+    // bounded-to-unbounded, in both width directions. Only the STRING vs
+    // WSTRING family boundary still rejects (pinned in
+    // call_binding_contract_rejection).
     let errors = check_errors(
         r#"
 FUNCTION_BLOCK Bind
@@ -411,8 +416,8 @@ END_PROGRAM
             .iter()
             .filter(|code| **code == DiagnosticCode::InvalidArgumentType)
             .count(),
-        3,
-        "STRING/WSTRING width mismatches and bounded/unbounded binding must be rejected: {errors:?}"
+        0,
+        "in-out strings bind across capacities and bounded-to-unbounded: {errors:?}"
     );
 }
 
@@ -938,8 +943,7 @@ END_PROGRAM
 
 #[test]
 fn test_infix_ampersand_matches_and_for_bit_strings() {
-    let errors = check_errors(
-        r#"
+    let source = r#"
 PROGRAM Test
     VAR
         w : WORD := WORD#16#FF00;
@@ -947,20 +951,26 @@ PROGRAM Test
     END_VAR
     w := w & dw;
 END_PROGRAM
-"#,
+"#;
+    // '&' widens like AND (WORD & DWORD -> DWORD); the narrowing store is a
+    // DEV-026 warning, not an error — the shrink is not silent.
+    assert!(
+        check_errors(source).is_empty(),
+        "'&' must widen like AND with no errors"
     );
     assert_eq!(
-        errors,
-        vec![DiagnosticCode::IncompatibleAssignment],
-        "Expected '&' to widen like AND and only fail on the narrowing assignment, got: {:?}",
-        errors
+        check_warnings(source)
+            .iter()
+            .filter(|code| **code == DiagnosticCode::IncompatibleAssignment)
+            .count(),
+        1,
+        "the narrowing store must still warn"
     );
 }
 
 #[test]
 fn test_infix_bitwise_mixed_width_results_cannot_shrink_silently() {
-    let errors = check_errors(
-        r#"
+    let source = r#"
 PROGRAM Test
     VAR
         w : WORD := WORD#16#FF00;
@@ -968,12 +978,17 @@ PROGRAM Test
     END_VAR
     w := w AND dw;
 END_PROGRAM
-"#,
+"#;
+    assert!(
+        check_errors(source).is_empty(),
+        "the mixed-width AND must only warn on the narrowing store"
     );
     assert_eq!(
-        errors,
-        vec![DiagnosticCode::IncompatibleAssignment],
-        "Expected only the narrowing assignment error, got: {:?}",
-        errors
+        check_warnings(source)
+            .iter()
+            .filter(|code| **code == DiagnosticCode::IncompatibleAssignment)
+            .count(),
+        1,
+        "the narrowing store must still warn — nothing shrinks silently"
     );
 }

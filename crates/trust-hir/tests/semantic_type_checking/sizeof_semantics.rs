@@ -315,3 +315,25 @@ END_CLASS
         DiagnosticCode::InvalidOperation,
     );
 }
+
+#[test]
+fn test_sizeof_result_binds_unsigned_and_warns_into_narrower_integers() {
+    // CODESYS parity: SIZEOF yields an unsigned magnitude (the vendor
+    // udiSize idiom), and narrower integer destinations take it under the
+    // DEV-026 narrowing warning — never an error.
+    check_no_errors(
+        r#"
+PROGRAM Test
+VAR
+    x : DINT;
+    unsignedSize : UDINT;
+    signedSize : DINT;
+    byteSize : BYTE;
+END_VAR
+unsignedSize := SIZEOF(x);
+signedSize := SIZEOF(x);
+byteSize := SIZEOF(x);
+END_PROGRAM
+"#,
+    );
+}

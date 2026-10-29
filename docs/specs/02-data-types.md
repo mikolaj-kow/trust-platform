@@ -784,17 +784,22 @@ when a source string is longer than its assignment target. For bounded
 - A function result is first bounded by its declared return capacity. Ordinary
   assignment of that result, and function or function-block `VAR_OUTPUT`
   copy-back, truncate to the receiving target's declared capacity.
-- `VAR_IN_OUT` requires the actual and formal to have the same string family
-  and the same effective capacity after alias and constant-expression
-  resolution. A width mismatch, including bounded-to-unbounded binding, is
-  rejected with invalid-argument diagnostic category `E205` instead of performing an
-  implicit truncating copy-in/copy-back conversion.
+- `VAR_IN_OUT` requires the actual and formal to have the same string family.
+  Declared capacities need not match, matching CODESYS and the vendor buffer
+  idiom of a `STRING(1)` formal whose real capacity arrives in a separate size
+  argument (e.g. `WagoAppString.StrAppend(sBuffer, SIZEOF(sBuffer), …)`).
+  Capacity is not enforced at the call boundary: the callee bounds its writes
+  through its own formal capacity or size argument, and the caller's variable
+  keeps its own storage. Binding across families (`STRING` vs `WSTRING`) is
+  rejected with invalid-argument diagnostic category `E205`.
 - Literal bounds and truncation count Unicode scalar values and never split one
   scalar value.
 
 These rules apply at function and function-block call boundaries. They prevent
-call copy-back from storing a value longer than the receiving declaration and
-prevent a no-op `VAR_IN_OUT` call from silently changing caller state.
+call copy-back from storing a value longer than the receiving declaration on
+the by-value paths and prevent a no-op `VAR_IN_OUT` call from silently
+changing caller state; for `VAR_IN_OUT` strings the callee owns the capacity
+contract through its formal declaration or size argument.
 
 `STRING` and `WSTRING` remain distinct assignment families. Use the explicit
 standard conversion functions when crossing between them.

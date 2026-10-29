@@ -256,3 +256,95 @@ fn call_binding_contract_accepts_dangling_output_arrow() {
     // missing-binding diagnostic fires.
     accepted("z := Transfer(first := x, second := y, copied =>, target := x);");
 }
+
+const STRING_SPLICE_INTERFACE: &str = r#"
+FUNCTION Splice : DINT
+VAR_IN_OUT
+    buffer : STRING(1);
+END_VAR
+VAR_INPUT
+    appendee : STRING(80);
+END_VAR
+Splice := 0;
+END_FUNCTION
+"#;
+
+const WSTRING_SPLICE_INTERFACE: &str = r#"
+FUNCTION SpliceWide : DINT
+VAR_IN_OUT
+    buffer : WSTRING(1);
+END_VAR
+VAR_INPUT
+    appendee : WSTRING(40);
+END_VAR
+SpliceWide := 0;
+END_FUNCTION
+"#;
+
+#[test]
+fn call_binding_contract_accepts_in_out_string_across_capacities() {
+    // CODESYS parity (IEC_DEVIATIONS DEV-024): a STRING(1) in-out formal
+    // takes a string variable of any declared capacity — the vendor buffer
+    // idiom (WagoAppString.StrAppend) declares its real capacity in a
+    // separate size argument, so capacity equality cannot be required.
+    check_no_errors(&format!(
+        "{STRING_SPLICE_INTERFACE}\nPROGRAM Main\nVAR\nbig : STRING(255); small : STRING(10); result : DINT; END_VAR\nresult := Splice(big, small);\nEND_PROGRAM"
+    ));
+}
+
+#[test]
+fn call_binding_contract_accepts_in_out_string_capacity_reverse_binding() {
+    // The narrow actual binding into the wide formal is equally legal;
+    // copy-back safety is the callee's contract, not the call checker's.
+    check_no_errors(&format!(
+        "{STRING_SPLICE_INTERFACE}\nPROGRAM Main\nVAR\nbig : STRING(255); small : STRING(10); result : DINT; END_VAR\nresult := Splice(small, big);\nEND_PROGRAM"
+    ));
+}
+
+#[test]
+fn call_binding_contract_accepts_in_out_wstring_across_capacities() {
+    check_no_errors(&format!(
+        "{WSTRING_SPLICE_INTERFACE}\nPROGRAM Main\nVAR\nwide : WSTRING(20); result : DINT; END_VAR\nresult := SpliceWide(wide, wide);\nEND_PROGRAM"
+    ));
+}
+
+#[test]
+fn call_binding_contract_warns_on_integer_narrowing_argument() {
+    // CODESYS parity (IEC_DEVIATIONS DEV-026): a BYTE input receiving an
+    // INT variable is a warning, not a call-binding error — the DMX port
+    // idiom in the downstream tree does this on every call.
+    let mut db = Database::new();
+    let file = FileId(0);
+    db.set_source_text(
+        file,
+        r#"
+FUNCTION Drive : DINT
+VAR_INPUT port : BYTE; END_VAR
+Drive := port;
+END_FUNCTION
+PROGRAM Main
+VAR portNum : INT; result : DINT; END_VAR
+result := Drive(portNum);
+END_PROGRAM
+"#
+        .to_string(),
+    );
+    let mismatches: Vec<(DiagnosticCode, DiagnosticSeverity)> = {
+        let diagnostics = db.diagnostics(file);
+        diagnostics
+            .iter()
+            .filter(|d| d.code == DiagnosticCode::InvalidArgumentType)
+            .map(|d| (d.code, d.severity))
+            .collect()
+    };
+    assert_eq!(
+        mismatches.len(),
+        1,
+        "narrowing argument stays diagnosed once: {mismatches:?}"
+    );
+    assert_eq!(
+        mismatches[0].1,
+        DiagnosticSeverity::Warning,
+        "integer narrowing at a call argument is a warning: {mismatches:?}"
+    );
+}

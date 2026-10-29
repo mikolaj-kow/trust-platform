@@ -131,26 +131,46 @@ fn partial_access_rejects_wrong_bit_write_type() {
 }
 
 #[test]
-fn partial_access_rejects_wrong_byte_write_type() {
-    check_has_error(
-        "PROGRAM Main\nVAR value : DWORD; END_VAR\nvalue.%B0 := WORD#1;\nEND_PROGRAM",
-        DiagnosticCode::IncompatibleAssignment,
+fn partial_access_warns_on_wrong_byte_write_type() {
+    // DEV-026: a wider typed literal into a %-access window narrows with a
+    // warning, not an error.
+    let source = "PROGRAM Main\nVAR value : DWORD; END_VAR\nvalue.%B0 := WORD#1;\nEND_PROGRAM";
+    assert!(check_errors(source).is_empty());
+    assert_eq!(
+        check_warnings(source)
+            .iter()
+            .filter(|code| **code == DiagnosticCode::IncompatibleAssignment)
+            .count(),
+        1,
+        "the narrowed %-window store must still warn"
     );
 }
 
 #[test]
-fn partial_access_rejects_wrong_word_write_type() {
-    check_has_error(
-        "PROGRAM Main\nVAR value : LWORD; END_VAR\nvalue.%W0 := DWORD#1;\nEND_PROGRAM",
-        DiagnosticCode::IncompatibleAssignment,
+fn partial_access_warns_on_wrong_word_write_type() {
+    let source = "PROGRAM Main\nVAR value : LWORD; END_VAR\nvalue.%W0 := DWORD#1;\nEND_PROGRAM";
+    assert!(check_errors(source).is_empty());
+    assert_eq!(
+        check_warnings(source)
+            .iter()
+            .filter(|code| **code == DiagnosticCode::IncompatibleAssignment)
+            .count(),
+        1,
+        "the narrowed %-window store must still warn"
     );
 }
 
 #[test]
-fn partial_access_rejects_wrong_dword_write_type() {
-    check_has_error(
-        "PROGRAM Main\nVAR value : LWORD; END_VAR\nvalue.%D0 := LWORD#1;\nEND_PROGRAM",
-        DiagnosticCode::IncompatibleAssignment,
+fn partial_access_warns_on_wrong_dword_write_type() {
+    let source = "PROGRAM Main\nVAR value : LWORD; END_VAR\nvalue.%D0 := LWORD#1;\nEND_PROGRAM";
+    assert!(check_errors(source).is_empty());
+    assert_eq!(
+        check_warnings(source)
+            .iter()
+            .filter(|code| **code == DiagnosticCode::IncompatibleAssignment)
+            .count(),
+        1,
+        "the narrowed %-window store must still warn"
     );
 }
 

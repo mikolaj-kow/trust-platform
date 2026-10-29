@@ -287,7 +287,10 @@
     }
 
     #[test]
-    fn analyze_salsa_rejects_mismatched_cross_file_constant_string_capacity() {
+    fn analyze_salsa_binds_mismatched_cross_file_constant_string_capacity_on_in_out() {
+        // IEC_DEVIATIONS DEV-024: in-out strings bind across declared
+        // capacities (CODESYS parity); the constant capacity still resolves
+        // across files, it just no longer rejects the call.
         let mut db = Database::new();
         let file_globals = FileId(35);
         let file_library = FileId(36);
@@ -315,8 +318,8 @@
                 .iter()
                 .filter(|diagnostic| diagnostic.code == DiagnosticCode::InvalidArgumentType)
                 .count(),
-            1,
-            "mismatched cross-file string capacities must still be rejected: {:?}",
+            0,
+            "in-out string capacity mismatch binds across files (DEV-024): {:?}",
             analysis.diagnostics
         );
     }
