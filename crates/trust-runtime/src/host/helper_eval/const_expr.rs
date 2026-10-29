@@ -175,7 +175,9 @@ fn eval_mixed_sign_integer_binary(
     if left_is_signed == right_is_signed {
         return Ok(None);
     }
-    let (a, b) = (magnitude(left)?, magnitude(right)?);
+    let (Some(a), Some(b)) = (magnitude(left), magnitude(right)) else {
+        return Ok(None);
+    };
     let result = match op {
         BinaryOp::Add => a.checked_add(b).ok_or(RuntimeError::Overflow)?,
         BinaryOp::Sub => a.checked_sub(b).ok_or(RuntimeError::Overflow)?,
