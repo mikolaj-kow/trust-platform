@@ -542,7 +542,11 @@ re-check them against this rule when touched.
   the runtime (the VM promotes instead of faulting); MOD keeps its
   integer-only gate, mixed integer/bit-string *arithmetic* (`INT +
   UINT`, `WORD + INT`), and integer/REAL accuracy-loss combinations keep
-  their diagnostics.
+  their diagnostics. The compile-time constant evaluator promotes true
+  mixed signed×unsigned pairs the same way (exact i128 math, materialized
+  LINT/ULINT) so array bounds and initializers like
+  `ARRAY[0..SIZEOF(x)-1]` keep working with an unsigned SIZEOF; the VM
+  execution path keeps its stricter contract.
 - Mitigation: admission is silent (matches the vendor toolchain and the
   existing logical-operator precedent) but type-class-scoped — BOOL and
   non-scalar pairs, REAL accuracy-loss pairs, and mixed-family
