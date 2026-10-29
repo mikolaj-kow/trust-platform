@@ -458,10 +458,10 @@ re-check them against this rule when touched.
   typed conversions; enumerated source types appear in no conversion table
   (`§6.4.4.2` treats an enumeration as a distinct type), `BOOL`/`TIME`
   string forms are not listed, duration-to-narrow-integer forms exceed the
-  listed `TIME`/`DWORD` pair, and `TOD`/`LTOD` to `DWORD` is not listed.
-  The standard text was unavailable on the authoring machine; the clause
-  numbers mirror the citations already used in
-  `docs/specs/07-standard-functions.md`.
+  listed `TIME`/`DWORD` pair, `TOD`/`LTOD` to `DWORD` is not listed, and
+  string sources to bit-string targets are not listed. The standard text
+  was unavailable on the authoring machine; the clause numbers mirror the
+  citations already used in `docs/specs/07-standard-functions.md`.
 - truST behavior and conflict: truST accepts — matching the CODESYS /
   TwinCAT vendor toolchain — (a) `TO_STRING`/`*_TO_STRING` over an
   enumerated value (yields the variant name), over `BOOL`
@@ -469,18 +469,37 @@ re-check them against this rule when touched.
   and over any same-family string (identity); (b) `TIME_TO_<int>` /
   `LTIME_TO_<int>` (ms / ns magnitude truncated into the destination,
   negative durations overflow); (c) `TOD_TO_DWORD` / `LTOD_TO_DWORD`
-  (ms-of-day magnitude). The strict table reading rejects vendor-project
+  (ms-of-day magnitude); (d) `REAL_TO_TIME` / `UINT_TO_TIME` (the value is
+  the millisecond magnitude of the duration, truncated; a negative or
+  non-finite value, or a magnitude beyond the `DWORD`-ms range, overflows);
+  (e) `DWORD_TO_TOD` (the raw ms-of-day magnitude without 24-hour
+  validation, mirroring `TOD`'s `DWORD` representation); (f) `STRING` /
+  `WSTRING` to `BYTE`/`WORD`/`DWORD`/`LWORD` (the string's text is parsed
+  as an unsigned integer literal — radix-prefixed forms included — and
+  anything that is not one yields `0`; the magnitude wraps into the
+  destination width). The strict table reading rejects vendor-project
   call sites that compile clean in the vendor toolchain (the downstream
   tree carries ~130 such sites: `TO_STRING(eArea)` families, boot-report
-  `TIME_TO_DINT` chains, `TOD_TO_DWORD` day-phase math).
+  `TIME_TO_DINT` chains, `TOD_TO_DWORD` day-phase math, MQTT payload
+  `TO_BYTE(sValue)` fields, and `REAL_TO_TIME`/`UINT_TO_TIME` scaling
+  chains).
 - Impact: those call sites pass the compile gate; the runtime conversion
   dispatch (`trust-runtime-core`) implements the same entries so executed
   conversions produce the documented values.
 - Mitigation: the extension set is deliberately bounded — time-of-day and
-  date string forms, and REAL-to-bitstring conversions (upstream #127
-  territory), stay rejected; integer destinations wrap rather than fault on
-  magnitude overflow, matching the vendor toolchain's silent narrowing
-  documented in DEV-023's neighborhood.
+  date string forms, REAL-to-bitstring conversions (upstream #127
+  territory), other integer-to-`TIME` pairs (only the `REAL`/`UINT`
+  duration sources vendor projects use are admitted; `INT_TO_TIME` and
+  friends stay rejected), and `STRING`/`WSTRING` to `BOOL` (`'TRUE'`/
+  `'FALSE'` text semantics are not specified here) stay rejected; integer
+  and bit-string destinations wrap rather than fault on magnitude overflow,
+  matching the vendor toolchain's silent narrowing documented in DEV-023's
+  neighborhood, and string conversions to numeric destinations keep the
+  strict fault behavior they already had.
+- Open note (2026-10-29): extension round — (d)-(f) were added after the
+  downstream runtime-check campaign enumerated its remaining E205 residue;
+  they ride the same compiler accept table, runtime conversion dispatch,
+  and spec 07 sections as (a)-(c).
 
 ## 2026-10-28 - Integer/bit-string narrowing bindings as warnings
 

@@ -142,34 +142,9 @@ pub(super) fn is_conversion_allowed(src: ConversionType, dst: ConversionType) ->
     if matches!(src, ConversionType::Tod | ConversionType::LTod) && dst == ConversionType::DWord {
         return true;
     }
-    if src == ConversionType::Ldt && dst == ConversionType::Dt {
-        return true;
-    }
-    if src == ConversionType::Ldt && dst == ConversionType::Date {
-        return true;
-    }
-    if src == ConversionType::Ldt && dst == ConversionType::LTod {
-        return true;
-    }
-    if src == ConversionType::Ldt && dst == ConversionType::Tod {
-        return true;
-    }
-    if src == ConversionType::Dt && dst == ConversionType::Ldt {
-        return true;
-    }
-    if src == ConversionType::Dt && dst == ConversionType::Date {
-        return true;
-    }
-    if src == ConversionType::Dt && dst == ConversionType::LTod {
-        return true;
-    }
-    if src == ConversionType::Dt && dst == ConversionType::Tod {
-        return true;
-    }
-    if src == ConversionType::LTod && dst == ConversionType::Tod {
-        return true;
-    }
-    if src == ConversionType::Tod && dst == ConversionType::LTod {
+    // Date/time family cross-conversions live in
+    // is_date_time_family_conversion.
+    if is_date_time_family_conversion(src, dst) {
         return true;
     }
 
@@ -188,7 +163,24 @@ pub(super) fn is_conversion_allowed(src: ConversionType, dst: ConversionType) ->
     {
         return true;
     }
-    if matches!(src, ConversionType::String | ConversionType::WString) && is_numeric_type(dst) {
+    // CODESYS parses the string's text for numeric and bit-string
+    // destinations alike; the unsigned bit-string parse fails to 0
+    // (IEC_DEVIATIONS DEV-025).
+    if matches!(src, ConversionType::String | ConversionType::WString)
+        && (is_numeric_type(dst)
+            || matches!(
+                dst,
+                ConversionType::Byte
+                    | ConversionType::Word
+                    | ConversionType::DWord
+                    | ConversionType::LWord
+            ))
+    {
+        return true;
+    }
+    // Remaining DEV-025 vendor-extension entries (numeric-to-duration
+    // magnitudes, DWORD_TO_TOD) live in is_dev025_extension_conversion.
+    if is_dev025_extension_conversion(src, dst) {
         return true;
     }
     if matches!(dst, ConversionType::Char | ConversionType::WChar)
@@ -235,6 +227,60 @@ pub(super) fn is_conversion_allowed(src: ConversionType, dst: ConversionType) ->
         return true;
     }
 
+    false
+}
+
+// The 2026-10-29 DEV-025 extension round: numeric-to-duration magnitudes
+// and the DWORD_TO_TOD inverse (IEC_DEVIATIONS DEV-025). Kept beside the
+// main table so each vendor-extension family stays reviewable in one
+// place without growing the strict-table function.
+fn is_dev025_extension_conversion(src: ConversionType, dst: ConversionType) -> bool {
+    // CODESYS numeric-to-duration parity: the value is the millisecond
+    // magnitude of the resulting duration (IEC_DEVIATIONS DEV-025).
+    if matches!(src, ConversionType::Real | ConversionType::UInt) && dst == ConversionType::Time {
+        return true;
+    }
+    // CODESYS DWORD_TO_TOD parity: the raw ms-of-day magnitude, the inverse
+    // of the TOD_TO_DWORD entry (IEC_DEVIATIONS DEV-025).
+    if src == ConversionType::DWord && dst == ConversionType::Tod {
+        return true;
+    }
+    false
+}
+
+// Date/time family cross-conversions between the calendar and time-of-day
+// representations (LDT/DT/DATE and TOD/LTOD pairs).
+fn is_date_time_family_conversion(src: ConversionType, dst: ConversionType) -> bool {
+    if src == ConversionType::Ldt && dst == ConversionType::Dt {
+        return true;
+    }
+    if src == ConversionType::Ldt && dst == ConversionType::Date {
+        return true;
+    }
+    if src == ConversionType::Ldt && dst == ConversionType::LTod {
+        return true;
+    }
+    if src == ConversionType::Ldt && dst == ConversionType::Tod {
+        return true;
+    }
+    if src == ConversionType::Dt && dst == ConversionType::Ldt {
+        return true;
+    }
+    if src == ConversionType::Dt && dst == ConversionType::Date {
+        return true;
+    }
+    if src == ConversionType::Dt && dst == ConversionType::LTod {
+        return true;
+    }
+    if src == ConversionType::Dt && dst == ConversionType::Tod {
+        return true;
+    }
+    if src == ConversionType::LTod && dst == ConversionType::Tod {
+        return true;
+    }
+    if src == ConversionType::Tod && dst == ConversionType::LTod {
+        return true;
+    }
     false
 }
 

@@ -3,6 +3,7 @@ use crate::error::RuntimeError;
 use crate::value::Value;
 
 use super::numeric::{signed_int_from_i64, unsigned_int_from_u64};
+use super::string::{parse_int_text, string_input};
 
 pub(super) fn convert_to_bit_string(
     value: &Value,
@@ -52,6 +53,24 @@ pub(super) fn convert_to_bit_string(
             }
             let millis = u32::try_from(millis).map_err(|_| RuntimeError::Overflow)?;
             Ok(Value::DWord(millis))
+        }
+        // CODESYS parses the string's text as an unsigned integer literal
+        // (radix-prefixed forms included); anything that is not one — empty
+        // text, garbage, a sign — yields 0, and the magnitude wraps into the
+        // destination width (IEC_DEVIATIONS DEV-025).
+        Value::String(_) | Value::WString(_)
+            if matches!(
+                dst,
+                ConversionType::Byte
+                    | ConversionType::Word
+                    | ConversionType::DWord
+                    | ConversionType::LWord
+            ) =>
+        {
+            let text = string_input(value)?;
+            let parsed = parse_int_text(text).unwrap_or(0);
+            let magnitude = if parsed < 0 { 0 } else { parsed as u64 };
+            unsigned_to_bit_string(magnitude, dst)
         }
         _ => Err(RuntimeError::TypeMismatch),
     }

@@ -11,6 +11,14 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
   BYTE` formals bind with a warning (same code and message) instead of
   an error. All other pointee mismatches stay errors; see
   `IEC_DEVIATIONS.md` (DEV-028).
+- Standard conversion extension round: `REAL_TO_TIME`/`UINT_TO_TIME` (the
+  value is the millisecond magnitude of the duration), `DWORD_TO_TOD` (the
+  raw ms-of-day magnitude), and `STRING`/`WSTRING` to bit-string targets
+  parse the text as an unsigned integer literal and yield `0` when it is
+  not one. Other integer-to-`TIME` pairs, string-to-`BOOL`, and
+  REAL-to-bit-string conversions stay rejected; implemented in the compiler
+  accept table and the runtime conversion dispatch; see `IEC_DEVIATIONS.md`
+  (DEV-025).
 - Comparisons and bit-string arithmetic match CODESYS: signed/unsigned
   integer pairs, integer/bit-string pairs, and two bit-string operands in
   `+ - * /` are admitted and evaluate through a common magnitude (the
