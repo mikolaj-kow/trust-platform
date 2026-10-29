@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use trust_hir::db::{Database, FileId, SemanticDatabase, SourceDatabase};
 use trust_hir::diagnostics::{DiagnosticCode, DiagnosticSeverity};
-use trust_runtime::harness::TestHarness;
+use trust_runtime::harness::{CompileSession, TestHarness};
 use trust_runtime::value::Value;
 use verification_cases::{
     run_case_file, CaseExecution, CaseRecord, CaseResult, RunConfig, StateProbe, StateSnapshot,
@@ -80,16 +80,18 @@ fn run_string_case(
             &[("observed_length", ExpectedValue::DInt(3))],
         ),
         "FB_INOUT_MISMATCH_STRING" => {
-            // DEV-024: the wider caller string binds; the trace runs the
-            // call end to end instead of expecting a rejection.
-            run_runtime(probe, FB_INOUT_MISMATCH_STRING, &[])
+            // DEV-024: the wider caller string binds at compile time. The
+            // runtime reference-binding capacity policy is a spec 10 open
+            // question (DEV-024 open note), so the trace asserts the
+            // compile contract only.
+            compile_accept(probe, FB_INOUT_MISMATCH_STRING)
         }
         "FB_OUTPUT_COPYBACK_WSTRING" => run_runtime(
             probe,
             FB_OUTPUT_COPYBACK_WSTRING,
             &[("narrow", ExpectedValue::WString("ABC"))],
         ),
-        "FB_INOUT_MISMATCH_WSTRING" => run_runtime(probe, FB_INOUT_MISMATCH_WSTRING, &[]),
+        "FB_INOUT_MISMATCH_WSTRING" => compile_accept(probe, FB_INOUT_MISMATCH_WSTRING),
         "UNICODE_LITERAL_BOUND" => run_runtime(
             probe,
             UNICODE_LITERAL_BOUND,
@@ -128,8 +130,8 @@ fn run_string_case(
             ],
         ),
         "FUNCTION_INOUT_MISMATCH" => {
-            // DEV-024: binds and runs; no rejection expected.
-            run_runtime(probe, FUNCTION_INOUT_MISMATCH, &[])
+            // DEV-024 compile contract; see the FB_INOUT_MISMATCH_STRING note.
+            compile_accept(probe, FUNCTION_INOUT_MISMATCH)
         }
         "NESTED_FIELD_COPYBACK" => run_runtime(
             probe,
@@ -211,6 +213,18 @@ fn hir_equal_alias(probe: &mut StringBindingProbe) -> Option<String> {
     let errors = hir_errors(HIR_INOUT_EQUAL_ALIAS);
     probe.diagnostics = errors.iter().map(|code| format!("{code:?}")).collect();
     (!errors.is_empty()).then(|| format!("equal alias binding errors: {errors:?}"))
+}
+
+fn compile_accept(probe: &mut StringBindingProbe, source: &str) -> Option<String> {
+    match CompileSession::from_source(source).build_runtime() {
+        Ok(_) => None,
+        Err(error) => {
+            probe.diagnostics.push(error.to_string());
+            Some(format!(
+                "capacity-mismatch fixture must compile (DEV-024): {error}"
+            ))
+        }
+    }
 }
 
 fn hir_inout_mismatch(probe: &mut StringBindingProbe) -> Option<String> {

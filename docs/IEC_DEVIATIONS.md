@@ -440,6 +440,15 @@ re-check them against this rule when touched.
   through its formal capacity or size argument; the caller's variable keeps
   its own storage. Cross-family binding and non-string in-out type
   mismatches keep their diagnostics.
+- Open note (2026-10-29): the compile-side contract is capacity-agnostic,
+  but the runtime's in-out reference binding still width-checks under the
+  `hir`-feature store/binding policy — a cycle that calls through a
+  capacity-mismatched in-out binding faults with `TypeMismatch` there
+  (the non-hir fallback binds). Making the runtime reference binding
+  capacity-agnostic (or documenting the fault as the vendor-parity
+  behavior) is a spec 10 owner decision tracked with DEV-026's narrowed
+  store note; until then downstream trace cases assert the compile
+  contract for capacity-mismatched bindings.
 
 ## 2026-10-28 - Vendor conversion extensions: enums, BOOL, durations, strings
 
