@@ -6,6 +6,11 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+- Pointer-target lenient bindings match CODESYS: `POINTER TO CHAR` ↔
+  `POINTER TO BYTE` and `ADR(STRING[n])` against `POINTER TO ARRAY OF
+  BYTE` formals bind with a warning (same code and message) instead of
+  an error. All other pointee mismatches stay errors; see
+  `IEC_DEVIATIONS.md` (DEV-028).
 - Comparisons and bit-string arithmetic match CODESYS: signed/unsigned
   integer pairs, integer/bit-string pairs, and two bit-string operands in
   `+ - * /` are admitted and evaluate through a common magnitude (the
