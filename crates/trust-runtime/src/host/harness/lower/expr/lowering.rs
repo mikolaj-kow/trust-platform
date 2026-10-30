@@ -913,6 +913,29 @@ fn lower_call_arg(
         Some(expected_type) => Some(expected_type),
         None => lower_expression_type(&expr_node, ctx)?,
     };
+    // IEC_DEVIATIONS DEV-030: a dotted reference used as a call argument
+    // is a value — a qualified constant or enum member folds to its
+    // literal before the lvalue attempt (a dotted member access would
+    // otherwise lower as writable storage, which a namespaced enum member
+    // is not).
+    if !has_arrow && matches!(expr_node.kind(), SyntaxKind::NameRef | SyntaxKind::FieldExpr) {
+        let reference = node_text(&expr_node);
+        if reference.contains('.') {
+            let folded = ctx.lookup_compile_time_const(&reference).or_else(|| {
+                ctx.registry
+                    .resolve_qualified_enum_member(&reference)
+                    .and_then(|(type_id, member, _)| {
+                        enum_literal_value(&member, type_id, ctx.registry)
+                    })
+            });
+            if let Some(value) = folded {
+                return Ok(Some(CallArg {
+                    name,
+                    value: ArgValue::Expr(Expr::Literal(value)),
+                }));
+            }
+        }
+    }
     let value = if has_arrow {
         ArgValue::Target(lower_lvalue(&expr_node, ctx)?)
     } else if field_expr_property_accessor_name(&expr_node, ctx, PropertyAccessor::Get)?.is_some() {

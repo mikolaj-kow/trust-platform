@@ -130,6 +130,16 @@ impl<'a> BytecodeEncoder<'a> {
                 .pou_ids
                 .function_id(&func.name)
                 .ok_or_else(|| BytecodeError::InvalidSection("function id missing".into()))?;
+            // CODESYS parity (IEC_DEVIATIONS DEV-033): a `: VOID` function
+            // has no return slot, so no frame declaration is added for it.
+            let return_slot = if matches!(
+                self.runtime.registry().get(func.return_type),
+                Some(trust_hir::Type::Void)
+            ) {
+                None
+            } else {
+                Some((&func.name, func.return_type))
+            };
             let LocalScope {
                 locals,
                 local_ref_start,
@@ -138,7 +148,7 @@ impl<'a> BytecodeEncoder<'a> {
             } = self.local_scope_for_body(
                 id,
                 &func.name,
-                Some((&func.name, func.return_type)),
+                return_slot,
                 &func.params,
                 &func.locals,
                 &func.body,

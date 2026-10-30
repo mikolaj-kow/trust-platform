@@ -109,3 +109,72 @@ fn time_tod_interchange_in_function_and_binary_arithmetic() {
     // 12:00:00 + 30M + 1H = 13:30:00 => 48_600_000 ms-of-day ticks.
     assert_eq!(tod.ticks(), 48_600_000);
 }
+
+#[test]
+fn void_returning_function_lowers_and_calls() {
+    // IEC_DEVIATIONS DEV-033: a `: VOID` function return declaration
+    // reaches the bytecode type table through the function's return type
+    // and encodes as its own primitive entry (the vendor MemCopy-shaped
+    // stub idiom).
+    let source = r#"
+        FUNCTION CopyBits : VOID
+        VAR_INPUT
+            flag : BOOL;
+        END_VAR
+        VAR
+            seen : BOOL;
+        END_VAR
+            seen := flag;
+        END_FUNCTION
+        PROGRAM Main
+        VAR
+            done : BOOL;
+        END_VAR
+        CopyBits(flag := TRUE);
+        done := TRUE;
+        END_PROGRAM
+    "#;
+
+    let mut harness = TestHarness::from_source(source).unwrap();
+    let cycle = harness.cycle();
+    assert!(
+        cycle.errors.is_empty(),
+        "unexpected runtime errors: {:?}",
+        cycle.errors
+    );
+    harness.assert_eq("done", true);
+}
+
+#[test]
+fn qualified_enum_member_as_call_argument_lowers() {
+    // IEC_DEVIATIONS DEV-030: a fully qualified enum member used as a
+    // call argument folds to its value — it is a read, not writable
+    // storage, so the argument must not lower as an lvalue target.
+    let source = r#"
+        NAMESPACE WagoTypesAppLED
+        TYPE eLedID : (AppLED_1 := INT#1, AppLED_2 := INT#2);
+        END_TYPE
+        END_NAMESPACE
+        FUNCTION Pick : INT
+        VAR_INPUT
+            led : WagoTypesAppLED.eLedID;
+        END_VAR
+            Pick := INT#10;
+        END_FUNCTION
+        PROGRAM Main
+        VAR
+            result : INT;
+        END_VAR
+        result := Pick(led := WagoTypesAppLED.eLedID.AppLED_2);
+        END_PROGRAM
+    "#;
+
+    let mut harness = TestHarness::from_source(source).unwrap();
+    let cycle = harness.cycle();
+    assert!(
+        cycle.errors.is_empty(),
+        "unexpected runtime errors: {:?}",
+        cycle.errors
+    );
+    harness.assert_eq("result", 10i16);
+}
