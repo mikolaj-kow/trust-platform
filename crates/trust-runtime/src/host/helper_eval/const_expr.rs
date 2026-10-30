@@ -108,11 +108,21 @@ fn eval_const_expr_with_types(
             // compile-time math is exact, so `SIZEOF(x) - 1` with an
             // unsigned SIZEOF cannot fault. Same-sign pairs and every
             // non-integer pair keep the shared apply_binary contract (the
-            // VM execution path is unchanged).
+            // VM execution path is unchanged); when a narrow-typed pair
+            // faults only on materialization, the exact fold below keeps
+            // a representable magnitude from failing at compile time.
             if let Some(result) = eval_mixed_sign_integer_binary(*op, &left, &right)? {
                 return Ok(result);
             }
-            Ok(apply_binary(*op, left, right, profile)?)
+            let exact_narrow = exact_narrow_integer_binary(*op, &left, &right)?;
+            match apply_binary(*op, left, right, profile) {
+                Ok(value) => Ok(value),
+                Err(RuntimeError::Overflow) => match exact_narrow {
+                    Some(result) => Ok(result),
+                    None => Err(RuntimeError::Overflow.into()),
+                },
+                Err(error) => Err(error.into()),
+            }
         }
         Expr::SizeOf(crate::program_model::SizeOfTarget::Type(type_id)) => {
             let size = size_of_type_with_abi(*type_id, registry, registry.abi)
@@ -176,6 +186,62 @@ fn eval_mixed_sign_integer_binary(
         return Ok(None);
     }
     let (Some(a), Some(b)) = (magnitude(left), magnitude(right)) else {
+        return Ok(None);
+    };
+    let result = match op {
+        BinaryOp::Add => a.checked_add(b).ok_or(RuntimeError::Overflow)?,
+        BinaryOp::Sub => a.checked_sub(b).ok_or(RuntimeError::Overflow)?,
+        BinaryOp::Mul => a.checked_mul(b).ok_or(RuntimeError::Overflow)?,
+        BinaryOp::Div => {
+            if b == 0 {
+                return Err(RuntimeError::DivisionByZero);
+            }
+            a.checked_div(b).ok_or(RuntimeError::Overflow)?
+        }
+        BinaryOp::Mod => {
+            if b == 0 {
+                return Err(RuntimeError::ModuloByZero);
+            }
+            a.checked_rem(b).ok_or(RuntimeError::Overflow)?
+        }
+        _ => return Ok(None),
+    };
+    if result < 0 {
+        i64::try_from(result)
+            .map(|value| Some(Value::LInt(value)))
+            .map_err(|_| RuntimeError::Overflow)
+    } else {
+        u64::try_from(result)
+            .map(|value| Some(Value::ULInt(value)))
+            .map_err(|_| RuntimeError::Overflow)
+    }
+}
+
+/// CODESYS-parity constant folding (IEC_DEVIATIONS DEV-027): retry a
+/// narrow-typed same-sign integer pair that faulted on materialization,
+/// exactly in i128, so a representable magnitude cannot fail at compile
+/// time. Untyped literals materialize as the narrowest fitting tag, so
+/// `16 * 8` arrives as `SInt * SInt` and faults on the i8 narrowing, not
+/// on the arithmetic; the exact fold materializes as LINT (negative) or
+/// ULINT (non-negative) like the mixed-sign helper. Returns `None` for
+/// anything but the narrow tags (SInt/Int/USInt/UInt): typed DINT/LINT
+/// pairs keep their fault contract, bit-string tags keep DEV-027's
+/// wrapping arithmetic, and `Pow` stays out of the exact-folding set.
+fn exact_narrow_integer_binary(
+    op: BinaryOp,
+    left: &Value,
+    right: &Value,
+) -> Result<Option<Value>, RuntimeError> {
+    fn narrow_magnitude(value: &Value) -> Option<i128> {
+        match value {
+            Value::SInt(v) => Some(i128::from(*v)),
+            Value::Int(v) => Some(i128::from(*v)),
+            Value::USInt(v) => Some(i128::from(*v)),
+            Value::UInt(v) => Some(i128::from(*v)),
+            _ => None,
+        }
+    }
+    let (Some(a), Some(b)) = (narrow_magnitude(left), narrow_magnitude(right)) else {
         return Ok(None);
     };
     let result = match op {
@@ -390,5 +456,68 @@ mod tests {
                 Value::Int(2),
             ]
         );
+    }
+
+    #[test]
+    fn narrow_same_sign_folds_materialize_wide_instead_of_faulting() {
+        // IEC_DEVIATIONS DEV-027: untyped literals materialize narrowest
+        // fitting, so `16 * 8` arrives as SInt * SInt and faults on the
+        // i8 narrowing. The compile-time exact fold keeps a representable
+        // magnitude (the CODESYS syslog `N * 8` idiom).
+        let mul = Expr::Binary {
+            op: BinaryOp::Mul,
+            left: Box::new(Expr::Literal(Value::SInt(16))),
+            right: Box::new(Expr::Literal(Value::SInt(8))),
+        };
+        assert_eq!(
+            eval_const_expr(&mul, &DateTimeProfile::default()).unwrap(),
+            Value::ULInt(128)
+        );
+
+        let unsigned = Expr::Binary {
+            op: BinaryOp::Mul,
+            left: Box::new(Expr::Literal(Value::USInt(200))),
+            right: Box::new(Expr::Literal(Value::USInt(2))),
+        };
+        assert_eq!(
+            eval_const_expr(&unsigned, &DateTimeProfile::default()).unwrap(),
+            Value::ULInt(400)
+        );
+
+        let negative = Expr::Binary {
+            op: BinaryOp::Mul,
+            left: Box::new(Expr::Literal(Value::SInt(-64))),
+            right: Box::new(Expr::Literal(Value::SInt(3))),
+        };
+        assert_eq!(
+            eval_const_expr(&negative, &DateTimeProfile::default()).unwrap(),
+            Value::LInt(-192)
+        );
+    }
+
+    #[test]
+    fn narrow_folds_without_fault_keep_their_result_tag() {
+        let add = Expr::Binary {
+            op: BinaryOp::Add,
+            left: Box::new(Expr::Literal(Value::Int(2))),
+            right: Box::new(Expr::Literal(Value::Int(3))),
+        };
+        assert_eq!(
+            eval_const_expr(&add, &DateTimeProfile::default()).unwrap(),
+            Value::Int(5)
+        );
+    }
+
+    #[test]
+    fn typed_wide_pairs_keep_their_overflow_fault() {
+        let add = Expr::Binary {
+            op: BinaryOp::Add,
+            left: Box::new(Expr::Literal(Value::LInt(i64::MAX))),
+            right: Box::new(Expr::Literal(Value::LInt(1))),
+        };
+        assert!(matches!(
+            eval_const_expr(&add, &DateTimeProfile::default()),
+            Err(ConstExprError::Runtime(RuntimeError::Overflow))
+        ));
     }
 }
