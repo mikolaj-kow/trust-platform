@@ -729,3 +729,37 @@ re-check them against this rule when touched.
   rejects with its typed-literal diagnostic, e.g. the downstream
   C0032-style `T#` in a `TOD` slot rule) are unaffected, and no storage
   tag changes.
+
+## 2026-10-30 - Referenced unbound PROGRAM declarations admitted
+
+- ID: DEV-032
+- Area: the product build's structural binding guard for PROGRAM
+  declarations under a CONFIGURATION (`trust-runtime` harness build).
+- Normative IEC requirement: IEC 61131-3 Ed.3 `§7.2` scopes task binding
+  to `RESOURCE ... PROGRAM ... WITH`; a declared program POU without a
+  binding is a legal declaration whose body simply never executes
+  unless invoked (vendor toolchains compile it silently). The standard
+  text was unavailable on the authoring machine; the clause mirrors the
+  citation style already used in `docs/specs/09-semantic-rules.md`.
+- truST behavior and conflict: the type-checker accepts cross-program
+  invocation (vendor extension) and flags only never-referenced POUs as
+  `unused program` (W009), but the harness build rejected every
+  declared program without a RESOURCE binding or explicit extra
+  instance - rejecting the downstream s4 tree, whose
+  `PROGRAM MqttAutodiscovery` is invoked manually from `MqttSendQueue`
+  (phased autodiscovery state machine, one phase per scan) precisely so
+  that it does NOT run on a task schedule.
+- Impact: the binding guard now exempts declared programs the
+  analyzer's used-symbol pass did not flag unused - a program
+  referenced from any POU body (or binding) is admitted without a
+  binding, keeping the vendor's declare-invoke pattern. Truly
+  forgotten programs (never referenced) stay rejected with the same
+  diagnostic.
+- Mitigation: the exemption keys on the analyzer's used-symbol pass
+  (W009's range set), not on text presence; the legacy import context
+  carries its source compile's admission set through. Scope note:
+  admitting the declaration compiles the project; executing
+  cross-program invocation on the truST VM additionally requires
+  program-instance creation and a program call-dispatch kind (not yet
+  implemented) - vendor-runtime deployments are unaffected, and the
+  compile-time contract now matches the analyzer.

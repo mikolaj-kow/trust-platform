@@ -665,6 +665,7 @@ mod tests {
             program_access: Vec::new(),
             configuration: None,
             source_metadata: Vec::new(),
+            referenced_programs: Default::default(),
         };
         let sources: [&str; 0] = [];
         let paths: [&str; 0] = [];

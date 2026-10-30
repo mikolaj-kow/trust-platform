@@ -46909,3 +46909,23 @@ ignore_state = "not_ignored"
 disposition = "reviewed_nonmapping"
 reason_code = "no_reviewed_spec_or_invariant_binding"
 last_reviewed = "2026-10-30"
+
+[[reviews]]
+discovery_id = "DISC_F76D4DB554C1A94CF53A"
+discovery_source_kind = "rust_integration_test"
+path = "crates/trust-runtime/tests/build_unbound_program.rs"
+name = "referenced_unbound_program_is_admitted_without_a_binding"
+ignore_state = "not_ignored"
+disposition = "reviewed_nonmapping"
+reason_code = "no_reviewed_spec_or_invariant_binding"
+last_reviewed = "2026-10-30"
+
+[[reviews]]
+discovery_id = "DISC_3E831D8D010D9128786D"
+discovery_source_kind = "rust_integration_test"
+path = "crates/trust-runtime/tests/build_unbound_program.rs"
+name = "unbound_program_referenced_only_by_comment_stays_rejected"
+ignore_state = "not_ignored"
+disposition = "reviewed_nonmapping"
+reason_code = "no_reviewed_spec_or_invariant_binding"
+last_reviewed = "2026-10-30"

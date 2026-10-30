@@ -6,6 +6,11 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+- A declared PROGRAM referenced from a POU body is admitted without a
+  RESOURCE binding (the vendor declare-invoke pattern — the analyzer
+  already accepts cross-program invocation and flags only
+  never-referenced POUs as unused). Truly forgotten programs keep the
+  binding guard's diagnostic; see `IEC_DEVIATIONS.md` (DEV-032).
 - `TIME`/`TOD` literal interchange at expected-type coercion: a `TIME`
   literal in a `TOD`-typed position (and the reverse, long forms
   included) keeps its tag, and the runtime mixed-pair arithmetic
