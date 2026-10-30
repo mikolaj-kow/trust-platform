@@ -6,6 +6,13 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+- Empty named call arguments bind nothing: `RST := ,` omits the input
+  (function-block instances retain their stored value, function
+  parameters take the declared initializer) and `Q => ` without a target
+  leaves the output unconnected, matching the analyzer and the vendor
+  toolchain's explicit-default form. Positional empty slots, `?=`
+  reference assignments, and VAR_IN_OUT missing bindings keep their
+  rejections; see `IEC_DEVIATIONS.md` (DEV-029).
 - Constant-expression folding is exact for narrow-typed integer operands:
   same-sign `SINT`/`INT`/`USINT`/`UINT` pairs that faulted only on the
   narrow materialization (untyped literals materialize narrowest
