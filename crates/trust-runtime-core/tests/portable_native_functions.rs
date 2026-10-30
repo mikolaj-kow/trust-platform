@@ -227,3 +227,54 @@ fn vendor_extension_conversions_cover_enum_bool_time_and_tod() {
         );
     }
 }
+
+#[test]
+fn vendor_extension_conversions_cover_numeric_time_tod_and_string_parse() {
+    // IEC_DEVIATIONS DEV-025 extension (2026-10-29): numeric-to-duration
+    // magnitudes, DWORD_TO_TOD, and the unsigned string-literal bit-string
+    // parse, shared with the compiler accept table.
+    for (name, input, expected) in [
+        (
+            "REAL_TO_TIME",
+            Value::Real(1250.7),
+            Ok(Value::Time(Duration::from_millis(1250))),
+        ),
+        (
+            "REAL_TO_TIME",
+            Value::Real(-1.0),
+            Err(RuntimeError::Overflow),
+        ),
+        (
+            "UINT_TO_TIME",
+            Value::UInt(1000),
+            Ok(Value::Time(Duration::from_millis(1000))),
+        ),
+        (
+            "DWORD_TO_TOD",
+            Value::DWord(3_600_000),
+            Ok(Value::Tod(TimeOfDayValue::new(3_600_000))),
+        ),
+        ("TO_BYTE", Value::String("42".into()), Ok(Value::Byte(42))),
+        (
+            "TO_BYTE",
+            Value::String("16#2A".into()),
+            Ok(Value::Byte(42)),
+        ),
+        ("TO_BYTE", Value::String("abc".into()), Ok(Value::Byte(0))),
+        ("TO_BYTE", Value::String("".into()), Ok(Value::Byte(0))),
+        ("TO_BYTE", Value::String("-5".into()), Ok(Value::Byte(0))),
+        ("TO_BYTE", Value::String("300".into()), Ok(Value::Byte(44))),
+        (
+            "STRING_TO_WORD",
+            Value::String("65535".into()),
+            Ok(Value::Word(65535)),
+        ),
+    ] {
+        let spec = conversions::conversion_spec(name).expect("prepared native conversion");
+        assert_eq!(
+            conversions::call_conversion_spec(spec, &[input]),
+            expected,
+            "{name}"
+        );
+    }
+}

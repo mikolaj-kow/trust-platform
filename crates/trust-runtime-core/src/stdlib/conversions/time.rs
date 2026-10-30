@@ -15,6 +15,22 @@ pub(super) fn convert_to_time(value: &Value, dst: ConversionType) -> Result<Valu
         (Value::DWord(value), ConversionType::Time) => Ok(Value::Time(
             crate::value::Duration::from_millis(i64::from(*value)),
         )),
+        // CODESYS numeric-to-duration parity: the value is the millisecond
+        // magnitude, truncated; negative or non-finite text and magnitudes
+        // beyond the vendor DWORD-ms range reject with an overflow fault
+        // (IEC_DEVIATIONS DEV-025).
+        (Value::Real(value), ConversionType::Time) => {
+            let millis = crate::numeric::math::trunc(*value as f64);
+            if !value.is_finite() || millis < 0.0 || millis > f64::from(u32::MAX) {
+                return Err(RuntimeError::Overflow);
+            }
+            Ok(Value::Time(crate::value::Duration::from_millis(
+                millis as i64,
+            )))
+        }
+        (Value::UInt(value), ConversionType::Time) => Ok(Value::Time(
+            crate::value::Duration::from_millis(i64::from(*value)),
+        )),
         _ => Err(RuntimeError::TypeMismatch),
     }
 }
@@ -43,6 +59,12 @@ pub(super) fn convert_to_tod(value: &Value, dst: ConversionType) -> Result<Value
     match (value, dst) {
         (Value::Tod(tod), ConversionType::Tod) => Ok(Value::Tod(*tod)),
         (Value::LTod(tod), ConversionType::LTod) => Ok(Value::LTod(*tod)),
+        // CODESYS DWORD_TO_TOD parity: the raw ms-of-day magnitude without
+        // 24-hour validation, mirroring TOD's DWORD representation
+        // (IEC_DEVIATIONS DEV-025).
+        (Value::DWord(value), ConversionType::Tod) => {
+            Ok(Value::Tod(TimeOfDayValue::new(i64::from(*value))))
+        }
         (Value::LTod(tod), ConversionType::Tod) => {
             let ticks = nanos_to_ticks(tod.nanos(), profile, DivisionMode::Euclid)?;
             Ok(Value::Tod(TimeOfDayValue::new(ticks)))

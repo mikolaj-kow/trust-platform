@@ -155,6 +155,14 @@ Implementer extension note:
   `TOD_TO_DWORD` and `LTOD_TO_DWORD` yield the ms-of-day magnitude.
   A negative duration rejects with an overflow fault, matching the
   `TIME_TO_DWORD` contract.
+- truST additionally provides numeric-to-duration and dword-to-time-of-day
+  conversions as documented non-IEC helpers (`IEC_DEVIATIONS.md` DEV-025):
+  `REAL_TO_TIME` and `UINT_TO_TIME` take the numeric value as the
+  millisecond magnitude of the resulting duration (truncated; a negative
+  or non-finite value, or a magnitude beyond the `DWORD`-ms range, rejects
+  with an overflow fault), and `DWORD_TO_TOD` takes the raw ms-of-day
+  magnitude without 24-hour validation, mirroring `TOD`'s `DWORD`
+  representation.
 
 ### 2.5 Character Type Conversions (Table 27)
 
@@ -211,6 +219,12 @@ and the typed `*_TO_STRING` spellings accept a `BOOL` (`'TRUE'`/`'FALSE'`),
 a `TIME`/`LTIME` (the `T#`/`LT#` duration text), and an enumerated value
 (its variant name); `TO_STRING` over a `STRING[n]` value is an identity
 copy. Time-of-day and date string forms are deliberately not provided.
+String sources to bit-string destinations (`BYTE`, `WORD`, `DWORD`,
+`LWORD`) parse the text as an unsigned integer literal — radix-prefixed
+forms (`16#`, `8#`, `2#`) included; anything that is not one (empty text,
+garbage, a sign) yields `0`, and the magnitude wraps into the destination
+width. String conversions to numeric destinations keep the strict fault
+behavior documented for the representatives below.
 
 These representatives do not define canonical output spelling for every
 numeric or bit-string value. `STRING_TO_REAL('NaN')` and

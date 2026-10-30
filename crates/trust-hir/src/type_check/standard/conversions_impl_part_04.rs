@@ -180,6 +180,11 @@ impl<'a, 'b> StandardChecker<'a, 'b> {
         if matches!(src, TypeId::DWORD) && dst == TypeId::TIME {
             return true;
         }
+        // CODESYS numeric-to-duration parity: the value is the millisecond
+        // magnitude of the resulting duration (IEC_DEVIATIONS DEV-025).
+        if matches!(src, TypeId::REAL | TypeId::UINT) && dst == TypeId::TIME {
+            return true;
+        }
         // CODESYS converts durations to any integer (ms magnitude, wrapping
         // like the vendor toolchain) and time-of-day to its ms-of-day
         // magnitude (IEC_DEVIATIONS DEV-025).
@@ -199,6 +204,11 @@ impl<'a, 'b> StandardChecker<'a, 'b> {
             return true;
         }
         if matches!(src, TypeId::TOD | TypeId::LTOD) && dst == TypeId::DWORD {
+            return true;
+        }
+        // CODESYS DWORD_TO_TOD parity: the raw ms-of-day magnitude, the
+        // inverse of the TOD_TO_DWORD entry above (IEC_DEVIATIONS DEV-025).
+        if matches!(src, TypeId::DWORD) && dst == TypeId::TOD {
             return true;
         }
         if matches!(src, TypeId::LDT) && dst == TypeId::DT {
@@ -256,7 +266,16 @@ impl<'a, 'b> StandardChecker<'a, 'b> {
         {
             return true;
         }
-        if matches!(src, TypeId::STRING | TypeId::WSTRING) && (self.is_numeric_type(dst)) {
+        // CODESYS parses the string's text for numeric and bit-string
+        // destinations alike; the unsigned bit-string parse fails to 0
+        // (IEC_DEVIATIONS DEV-025).
+        if matches!(src, TypeId::STRING | TypeId::WSTRING)
+            && (self.is_numeric_type(dst)
+                || matches!(
+                    dst,
+                    TypeId::BYTE | TypeId::WORD | TypeId::DWORD | TypeId::LWORD
+                ))
+        {
             return true;
         }
         if matches!(dst, TypeId::CHAR | TypeId::WCHAR)
