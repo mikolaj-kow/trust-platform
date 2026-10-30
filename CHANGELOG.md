@@ -6,6 +6,13 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+- Constant-expression folding is exact for narrow-typed integer operands:
+  same-sign `SINT`/`INT`/`USINT`/`UINT` pairs that faulted only on the
+  narrow materialization (untyped literals materialize narrowest
+  fitting — the vendor `LOG_LOCAL0 := 16 * 8` idiom) now fold in exact
+  wide math and materialize LINT/ULINT instead of failing at compile
+  time. Typed `DINT`/`LINT` overflow keeps its fault and the runtime
+  execution path is unchanged; see `IEC_DEVIATIONS.md` (DEV-027).
 - Pointer-target lenient bindings match CODESYS: `POINTER TO CHAR` ↔
   `POINTER TO BYTE` and `ADR(STRING[n])` against `POINTER TO ARRAY OF
   BYTE` formals bind with a warning (same code and message) instead of
