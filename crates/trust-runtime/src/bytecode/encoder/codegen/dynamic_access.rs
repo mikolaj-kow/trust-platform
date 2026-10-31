@@ -171,6 +171,24 @@ impl<'a> BytecodeEncoder<'a> {
         code: &mut Vec<u8>,
     ) -> Result<bool, BytecodeError> {
         use crate::program_model::LValue;
+        // Namespaced-GVL parity (IEC_DEVIATIONS DEV-034): a pure field
+        // chain may name a global registered under its full qualified form
+        // (`GVLEntities.astEntitiesBinSen` over a namespaced GVL). Try the
+        // dotted name before the per-segment walk; the segments then apply
+        // to the resolved global (index/field suffixes below).
+        match target {
+            LValue::Field { .. } => {
+                if let Some(qualified) = target.qualified_name()
+                    && let Some(reference) = self.resolve_name_ref(ctx, &qualified)?
+                {
+                    let ref_idx = self.ref_index_for(&reference)?;
+                    code.push(0x22);
+                    code.extend_from_slice(&ref_idx.to_le_bytes());
+                    return Ok(true);
+                }
+            }
+            _ => {}
+        }
         match target {
             LValue::Name(name) => self.emit_ref_for_name(ctx, name, code),
             LValue::Field { target, field } => {

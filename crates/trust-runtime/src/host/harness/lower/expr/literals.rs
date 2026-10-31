@@ -120,11 +120,27 @@ fn lower_literal_with_context(
         value = coerce_value_to_type(value, type_id)?;
     } else if let Some(type_id) = expected_type
         && value != Value::Null
+        && !time_tod_interchange(&value, type_id)
     {
         value = coerce_evaluated_initializer_value(value, type_id, ctx.registry, &ctx.profile)?;
     }
 
     Ok(Expr::Literal(value))
+}
+
+/// CODESYS TIME/TOD interchange (IEC_DEVIATIONS DEV-031): a TIME literal
+/// expected as TOD (and the reverse) keeps its tag — the runtime
+/// arithmetic handles the mixed pair natively (`TOD + TIME`, the vendor
+/// clock-adjust idiom `sunset + T#1h`), so an eager tag conversion would
+/// defeat it.
+fn time_tod_interchange(value: &Value, type_id: TypeId) -> bool {
+    matches!(
+        (value, type_id),
+        (Value::Time(_), TypeId::TOD)
+            | (Value::Tod(_), TypeId::TIME)
+            | (Value::LTime(_), TypeId::LTOD)
+            | (Value::LTod(_), TypeId::LTIME)
+    )
 }
 
 fn parse_real_literal(text: &str) -> Result<f64, CompileError> {

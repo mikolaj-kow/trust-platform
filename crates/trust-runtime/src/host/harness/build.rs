@@ -28,6 +28,10 @@ pub(crate) struct LoweredApplication {
     pub(crate) program_access: Vec<super::compiler::AccessDecl>,
     pub(crate) configuration: Option<super::compiler::ConfigModel>,
     pub(crate) source_metadata: Vec<LoweredSourceMetadata>,
+    /// Declared PROGRAM names (uppercased) the analyzer's used-symbol pass
+    /// did not flag unused (IEC_DEVIATIONS DEV-032) — admitted without a
+    /// RESOURCE binding.
+    pub(crate) referenced_programs: std::collections::BTreeSet<SmolStr>,
 }
 
 pub(crate) struct LoweredSourceMetadata {
@@ -133,6 +137,7 @@ pub(crate) fn lower_application_with_abi(
     storage_abi: crate::value::StorageAbi,
 ) -> Result<LoweredApplication, CompileError> {
     let frontend = analyze_source_files(sources, label_errors, storage_abi)?;
+    let referenced_programs = collect_referenced_program_names(&frontend);
 
     let mut builder = RuntimeBuilder::new();
     builder.storage_abi = storage_abi;
@@ -174,7 +179,36 @@ pub(crate) fn lower_application_with_abi(
         program_access: lowered_programs.program_access,
         configuration: lowered_programs.configuration,
         source_metadata,
+        referenced_programs,
     })
+}
+
+/// Program POUs the analyzer's own used-symbol pass did not flag unused
+/// (IEC_DEVIATIONS DEV-032): a declared PROGRAM referenced from any POU
+/// body or binding is admitted without a RESOURCE binding, mirroring the
+/// vendor toolchain where a task merely schedules an already-existing
+/// program instance. Truly forgotten programs stay rejected.
+fn collect_referenced_program_names(
+    frontend: &AnalyzedSourceFiles,
+) -> std::collections::BTreeSet<SmolStr> {
+    let mut referenced = std::collections::BTreeSet::new();
+    for file_id in &frontend.file_ids {
+        let analysis = frontend.project.database().analyze(*file_id);
+        let unused_ranges: std::collections::HashSet<_> = analysis
+            .diagnostics
+            .iter()
+            .filter(|diag| diag.code == trust_hir::diagnostics::DiagnosticCode::UnusedPou)
+            .map(|diag| diag.range)
+            .collect();
+        for symbol in analysis.symbols.iter() {
+            if matches!(symbol.kind, trust_hir::symbols::SymbolKind::Program)
+                && !unused_ranges.contains(&symbol.range)
+            {
+                referenced.insert(SmolStr::new(symbol.name.to_ascii_uppercase()));
+            }
+        }
+    }
+    referenced
 }
 
 fn lower_project_types(
@@ -553,6 +587,7 @@ impl LoweredApplication {
                 access,
                 config_inits,
             }),
+            referenced_programs: Default::default(),
         })
     }
 
@@ -625,6 +660,7 @@ impl LoweredApplication {
             &config.programs,
             &extras,
             &config.using,
+            &self.referenced_programs,
         )?;
         remap_program_access_instances(
             &mut self.program_access,
@@ -833,6 +869,7 @@ fn ensure_all_program_declarations_bound(
     configured_programs: &[super::ProgramInstanceConfig],
     extra_programs: &[super::ProgramInstanceConfig],
     using: &[SmolStr],
+    referenced_programs: &std::collections::BTreeSet<SmolStr>,
 ) -> Result<(), CompileError> {
     if program_defs.is_empty() {
         return Ok(());
@@ -846,7 +883,10 @@ fn ensure_all_program_declarations_bound(
 
     let unbound = program_defs
         .values()
-        .filter(|program| !bound_types.contains(&program.name.to_ascii_uppercase()))
+        .filter(|program| {
+            let name = program.name.to_ascii_uppercase();
+            !bound_types.contains(&name) && !referenced_programs.contains(name.as_str())
+        })
         .map(|program| program.name.as_str())
         .collect::<Vec<_>>();
     if unbound.is_empty() {
@@ -854,7 +894,9 @@ fn ensure_all_program_declarations_bound(
     }
 
     Err(CompileError::new(format!(
-        "unbound PROGRAM declaration(s) under CONFIGURATION: {}. Bind each declared PROGRAM with RESOURCE ... PROGRAM ... WITH, or register explicit extra program instances for test builders.",
+        "unbound PROGRAM declaration(s) under CONFIGURATION: {}. Bind each declared PROGRAM with \
+         RESOURCE ... PROGRAM ... WITH, register explicit extra program instances for test \
+         builders, or reference the program from a POU body (IEC_DEVIATIONS DEV-032).",
         unbound.join(", ")
     )))
 }

@@ -173,6 +173,17 @@ resolution. Output and in-out destinations are resolved once, validated as a
 complete transfer set, and committed only after normal return. These semantic
 requirements apply uniformly to functions, function blocks, and methods.
 
+An incomplete formal call stays admitted for input and output formals: a named
+binding with an empty right-hand side (`RST := ,`, `Q => ` without a target)
+omits that argument — inputs take the retained/default contract and unbound
+outputs stay unconnected (`IEC_DEVIATIONS.md` DEV-029). The VAR_IN_OUT
+missing-binding rule above keeps applying to in-out formals, a positional
+empty slot stays rejected (it has no name to bind), and `?=` reference
+assignments always require their target. Separately, a declared PROGRAM under
+a CONFIGURATION that is never bound to a task stays admissible when a POU
+body references it (`IEC_DEVIATIONS.md` DEV-032) — the binding schedules an
+existing instance and is not itself a validity condition.
+
 ### 3.5 Aggregate Initializer Errors
 
 Named aggregate initializers are validated at HIR collection/type-check time.

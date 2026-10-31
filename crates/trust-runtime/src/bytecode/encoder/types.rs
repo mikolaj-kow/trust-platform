@@ -43,6 +43,15 @@ impl<'a> BytecodeEncoder<'a> {
             self.collect_body_types(&program.body)?;
         }
         for func in self.runtime.functions().values() {
+            // A `: VOID` return has no type-table entry (IEC_DEVIATIONS
+            // DEV-033): the function carries no return slot and nothing
+            // references the type.
+            if matches!(
+                self.runtime.registry().get(func.return_type),
+                Some(trust_hir::Type::Void)
+            ) {
+                continue;
+            }
             self.type_index(func.return_type)?;
             self.collect_param_types(&func.params)?;
             self.collect_var_types(&func.locals)?;
@@ -600,8 +609,11 @@ impl<'a> BytecodeEncoder<'a> {
                     max_length: 0,
                 },
             ),
-            Type::Unknown
-            | Type::Void
+            // A `: VOID` return carries no type-table entry (DEV-033), so
+            // this arm is a should-never-happen guard for stray Void
+            // references.
+            Type::Void
+            | Type::Unknown
             | Type::Null
             | Type::Any
             | Type::AnyDerived
@@ -665,6 +677,7 @@ mod tests {
             program_access: Vec::new(),
             configuration: None,
             source_metadata: Vec::new(),
+            referenced_programs: Default::default(),
         };
         let sources: [&str; 0] = [];
         let paths: [&str; 0] = [];

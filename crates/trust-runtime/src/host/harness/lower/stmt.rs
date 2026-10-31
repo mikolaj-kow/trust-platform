@@ -99,6 +99,19 @@ fn lower_assign(node: &SyntaxNode, ctx: &mut LoweringContext<'_>) -> Result<Stmt
         None => value,
     };
     let value = bound_string_assignment_expr(value, target_type, ctx);
+    let attempt_kind = assignment_attempt_kind(node);
+    let value = match attempt_kind {
+        // CODESYS `REF=` binds the reference to the right-hand side's
+        // storage (IEC_DEVIATIONS DEV-034): lower the value as a
+        // reference to that storage so the runtime attempt sees a
+        // reference, not a copied value. Non-lvalue right-hand sides
+        // (NULL, expressions) keep their evaluated form.
+        Some(AssignmentAttemptKind::RefBind) => match lower_lvalue(&exprs[1], ctx) {
+            Ok(lvalue) => Expr::Ref(lvalue),
+            Err(_) => value,
+        },
+        _ => value,
+    };
     let location = stmt_location(node, ctx);
     if let Some(property_name) = property_setter {
         let field_parts = direct_expr_children(&exprs[0]);
@@ -119,7 +132,7 @@ fn lower_assign(node: &SyntaxNode, ctx: &mut LoweringContext<'_>) -> Result<Stmt
             location,
         });
     }
-    if assignment_is_attempt(node) {
+    if attempt_kind.is_some() {
         let target_type = target_type
             .ok_or_else(|| CompileError::new("assignment-attempt target type is unresolved"))?;
         Ok(Stmt::AssignAttempt {
@@ -235,10 +248,24 @@ fn bounded_string_len(type_id: TypeId, ctx: &LoweringContext<'_>) -> Option<u32>
     }
 }
 
-fn assignment_is_attempt(node: &SyntaxNode) -> bool {
+/// Which reference-attempt spelling the assignment used: `?=` (RefAssign)
+/// binds through a reference-valued expression, while `REF=` (KwRefBind)
+/// binds through the right-hand side's storage — the value must reach the
+/// runtime as a reference, not a copied value (IEC_DEVIATIONS DEV-034).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AssignmentAttemptKind {
+    RefValue,
+    RefBind,
+}
+
+fn assignment_attempt_kind(node: &SyntaxNode) -> Option<AssignmentAttemptKind> {
     node.children_with_tokens()
         .filter_map(|child| child.into_token())
-        .any(|token| token.kind() == SyntaxKind::RefAssign)
+        .find_map(|token| match token.kind() {
+            SyntaxKind::RefAssign => Some(AssignmentAttemptKind::RefValue),
+            SyntaxKind::KwRefBind => Some(AssignmentAttemptKind::RefBind),
+            _ => None,
+        })
 }
 
 fn lower_if(node: &SyntaxNode, ctx: &mut LoweringContext<'_>) -> Result<Stmt, CompileError> {

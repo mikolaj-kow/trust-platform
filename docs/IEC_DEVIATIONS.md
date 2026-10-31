@@ -564,14 +564,27 @@ re-check them against this rule when touched.
   their diagnostics. The compile-time constant evaluator promotes true
   mixed signed×unsigned pairs the same way (exact i128 math, materialized
   LINT/ULINT) so array bounds and initializers like
-  `ARRAY[0..SIZEOF(x)-1]` keep working with an unsigned SIZEOF; the VM
-  execution path keeps its stricter contract.
+  `ARRAY[0..SIZEOF(x)-1]` keep working with an unsigned SIZEOF; narrow
+  same-sign pairs (`SINT`/`INT`/`USINT`/`UINT` operands) that fault only
+  on the narrow materialization — untyped literals materialize
+  narrowest-fitting, so the vendor syslog idiom `LOG_LOCAL0 := 16 * 8`
+  arrives as an i8 multiply — are retried exactly in i128 and materialize
+  LINT/ULINT as well, while typed `DINT`/`LINT` pairs keep their
+  fault-on-overflow contract; the VM execution path keeps its stricter
+  contract.
 - Mitigation: admission is silent (matches the vendor toolchain and the
   existing logical-operator precedent) but type-class-scoped — BOOL and
   non-scalar pairs, REAL accuracy-loss pairs, and mixed-family
   arithmetic keep their errors; the runtime promotion lives in the
   compare/arithmetic paths, leaving the value-helper rejection pins
   intact.
+- Open note (2026-10-30): the narrow same-sign exact fold was added
+  after the downstream dialect-parity rounds produced the first compile
+  to reach bytecode lowering, unmasking a positionless arithmetic
+  overflow on `WagoTypesLog.eSysLogFacility` members written as `N * 8`
+  (`LOG_LOCAL0..LOG_LOCAL7`). Untyped-literal constant folding is exact;
+  a representable magnitude cannot fail at compile time, and typed
+  `DINT`/`LINT` overflow keeps its fault.
 
 ## 2026-10-29 - Pointer-target lenient bindings
 
@@ -608,3 +621,145 @@ re-check them against this rule when touched.
   `VAR_OUT`/`VAR_IN_OUT` pointer arms and variable initializers are not
   wired (mirroring DEV-026's scoping) and keep the error until a
   downstream need appears.
+
+## 2026-10-30 - Empty named call arguments bind nothing
+
+- ID: DEV-029
+- Area: formal call arguments in the bytecode lowerer — a named binding
+  with an empty right-hand side (`RST := ,` for inputs, `Q => ` or
+  `Q => ,` for outputs).
+- Normative IEC requirement: IEC 61131-3 Ed.3 §6.6.1.4.1 and Table 50
+  distinguish complete from incomplete formal calls; an input/output
+  mapping may be absent (the formal keeps its default or, for
+  function-block instances, its stored value), while a VAR_IN_OUT mapping
+  must always be present. The standard text was unavailable on the
+  authoring machine; the clause mirrors the citation style already used
+  in `docs/specs/09-semantic-rules.md`.
+- truST behavior and conflict: the parser already accepted the empty
+  form (CODESYS parity — vendor projects write `RST := , Q => )` to
+  document explicitly-defaulted inputs and unconnected outputs) and the
+  type-checker already dropped expression-less arguments, but the
+  bytecode lowerer required an expression child and rejected the
+  positionless "missing call argument". The lowerer now drops those
+  arguments the same way: an unbound input takes the function-block
+  retained value or the declared default (function parameters use the
+  declared initializer), and an unbound output simply stays unconnected.
+  The downstream s4 tree carries 40 such call sites across five POUs
+  (TOF/RTRIG/DEBOUNCE/dimmer calls written `RST := , Q => )`).
+- Impact: those call sites pass the compile gate and execute with the
+  same not-passed contract positional omission already uses — the VM's
+  binding paths have complete default/retain/Null arms for missing
+  arguments, so no uninitialized storage is reachable.
+- Mitigation: the admission is name-scoped — an empty binding must carry
+  a parameter name to bind nothing (a positional empty slot stays
+  rejected); `?=` reference assignments always require a target;
+  VAR_IN_OUT formals keep their missing-binding diagnostic (analyzer
+  first, runtime trap behind it); struct-initializer
+  `(field := value)` aggregates are a different product form and keep
+  their value requirement.
+
+## 2026-10-30 - Qualified compile-time constant and enum-member references
+
+- ID: DEV-030
+- Area: dotted references inside compile-time constant evaluation -
+  qualified enum members (`Namespace.EnumType.Member`,
+  `EnumType.Member`) and flattened-library constant references
+  (`LogParameter.MAX_LOG_MSG_LEN` over namespace-level constants).
+- Normative IEC requirement: IEC 61131-3 Ed.3 scopes symbolic constants
+  to their declaring namespace/POU with explicit qualification for
+  out-of-scope references; the flattened library form names a container
+  level (GVL list or documentation section) that carries no IEC scoping
+  role. The standard text was unavailable on the authoring machine; the
+  clause mirrors the citation style already used in
+  `docs/specs/09-semantic-rules.md`.
+- truST behavior and conflict: the type-checker already accepts both
+  forms where they occur in the s4 tree - qualified enum members as
+  global initializers (runtime-evaluated, resolved through the symbol
+  table's suffix matching over registered type names) and flattened
+  constants in declared-size positions (the unique-leaf tolerance
+  documented for declared sizes, IEC_DEVIATIONS 2026-10-25) - but the
+  bytecode lowerer's constant evaluation resolved only exact dotted
+  keys and bare members, rejecting the downstream s4 tree's initializers
+  with a positionless "expression is not a compile-time constant"
+  (`WagoTypesLog.eSysLogPriority.LOG_INFO` log-level globals,
+  `LogParameter.MAX_LOG_MSG_LEN` interface-method capacities, and
+  project-enum members such as `eDayPhase.Night`).
+- Impact: those initializers lower - qualified enum members resolve
+  through exact or unique-suffix enum-name matching with ambiguity kept
+  unresolved, and flattened constant references resolve when exactly one
+  registered constant carries the reference's last segment. Bare names
+  never take the leaf fallback (an unimported namespace's operand stays
+  unimported) and ambiguous matches keep the strict error. Evaluating
+  qualified references inside declared `VAR_CONSTANT` initializers
+  (which requires extending the type-checker's constant evaluator
+  itself) stays out of scope and keeps its diagnostic.
+- Mitigation: the tolerance is shape-scoped - dotted references only,
+  ambiguity stays unresolved, and the bare-name strictness documented
+  for the size view carries over; the unqualified-member ambiguity rule
+  of `resolve_enum_value_by_name` is unchanged.
+
+## 2026-10-30 - TIME/TOD literal interchange at expected-type coercion
+
+- ID: DEV-031
+- Area: typed-literal lowering where the expected type comes from the
+  context (binary operands, formal-call arguments): a `TIME` literal in
+  a `TOD`-typed position and the reverse (long forms included).
+- Normative IEC requirement: IEC 61131-3 Ed.3 keeps `TIME` and
+  `TIME_OF_DAY` as distinct types (`§6.4.2`); no implicit conversion
+  between them is listed, although `TOD + TIME` duration arithmetic is
+  the standard clock-adjustment idiom. The standard text was unavailable
+  on the authoring machine; the clause mirrors the citation style
+  already used in `docs/specs/05-expressions.md`.
+- truST behavior and conflict: the type-checker accepts the mixed
+  pairs (the downstream tree's clock-adjust function
+  `fUtcTodToLocalTod(UTC_TOD := ..., OFFSET := T#1h)` and its
+  `UTC_TOD + OFFSET + T#1H` body are written exactly this way), but
+  literal lowering eagerly coerced the literal into the expected tag and
+  rejected `TIME`-in-`TOD` positions with a positionless "expected TOD
+  initializer". The lowering now leaves the literal tag intact in those
+  positions: the runtime arithmetic promotes the mixed pair natively
+  (`TOD + TIME` and `TIME + TOD` yield `TOD`), so no runtime change is
+  involved.
+- Impact: the vendor clock-adjust idiom lowers and executes —
+  `Adjust(base := TOD#12:00:00, offset := T#30M)` with the body
+  `base + offset + T#1H` returns `TOD#13:30:00`.
+- Mitigation: the interchange is tag-preserving, not converting — the
+  literal keeps its `TIME` tag and the mixed-pair arithmetic arms do the
+  promotion, so initializer contexts (which the type-checker still
+  rejects with its typed-literal diagnostic, e.g. the downstream
+  C0032-style `T#` in a `TOD` slot rule) are unaffected, and no storage
+  tag changes.
+
+## 2026-10-30 - Referenced unbound PROGRAM declarations admitted
+
+- ID: DEV-032
+- Area: the product build's structural binding guard for PROGRAM
+  declarations under a CONFIGURATION (`trust-runtime` harness build).
+- Normative IEC requirement: IEC 61131-3 Ed.3 `§7.2` scopes task binding
+  to `RESOURCE ... PROGRAM ... WITH`; a declared program POU without a
+  binding is a legal declaration whose body simply never executes
+  unless invoked (vendor toolchains compile it silently). The standard
+  text was unavailable on the authoring machine; the clause mirrors the
+  citation style already used in `docs/specs/09-semantic-rules.md`.
+- truST behavior and conflict: the type-checker accepts cross-program
+  invocation (vendor extension) and flags only never-referenced POUs as
+  `unused program` (W009), but the harness build rejected every
+  declared program without a RESOURCE binding or explicit extra
+  instance - rejecting the downstream s4 tree, whose
+  `PROGRAM MqttAutodiscovery` is invoked manually from `MqttSendQueue`
+  (phased autodiscovery state machine, one phase per scan) precisely so
+  that it does NOT run on a task schedule.
+- Impact: the binding guard now exempts declared programs the
+  analyzer's used-symbol pass did not flag unused - a program
+  referenced from any POU body (or binding) is admitted without a
+  binding, keeping the vendor's declare-invoke pattern. Truly
+  forgotten programs (never referenced) stay rejected with the same
+  diagnostic.
+- Mitigation: the exemption keys on the analyzer's used-symbol pass
+  (W009's range set), not on text presence; the legacy import context
+  carries its source compile's admission set through. Scope note:
+  admitting the declaration compiles the project; executing
+  cross-program invocation on the truST VM additionally requires
+  program-instance creation and a program call-dispatch kind (not yet
+  implemented) - vendor-runtime deployments are unaffected, and the
+  compile-time contract now matches the analyzer.
