@@ -6,6 +6,12 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+- Function block instances stored in array elements are callable
+  through their index (`afbClickMode[0](xIn := ...)`, literal or
+  variable index) — the encoder classifies indexed call targets as
+  function-block calls dispatched on the element's runtime instance,
+  and the construction validator types the callee through the array's
+  element type; see `IEC_DEVIATIONS.md` (DEV-035).
 - A declared PROGRAM referenced from a POU body is admitted without a
   RESOURCE binding (the vendor declare-invoke pattern — the analyzer
   already accepts cross-program invocation and flags only

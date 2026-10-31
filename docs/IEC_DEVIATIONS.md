@@ -763,3 +763,39 @@ re-check them against this rule when touched.
   program-instance creation and a program call-dispatch kind (not yet
   implemented) - vendor-runtime deployments are unaffected, and the
   compile-time contract now matches the analyzer.
+
+## 2026-10-31 - FB instances invoked through array elements
+
+- ID: DEV-035
+- Area: the bytecode encoder's native-call target classification and
+  the source-free construction validator's reference typing
+  (`trust-runtime` encoder, `trust-runtime-core` validator).
+- Normative IEC requirement: IEC 61131-3 Ed.3 `§6.7.2.2` treats a
+  function block instance as a variable; arrays of instances
+  (`ARRAY[0..n] OF fbX`) are ordinary array variables whose elements
+  are individually addressable instances, and vendor toolchains call
+  them through their index (`afbClickMode[0](xIn := ...)`, the
+  per-button array idiom; variable indices `afb[uiIdx](...)` included).
+- truST behavior and conflict: the VM already dispatches FUNCTION_BLOCK
+  calls by the runtime instance id carried in the receiver value (the
+  callee name is not consulted), and arrays of FBs are already
+  constructed as per-element full instances - but the encoder's call
+  target classifier handled only Name and Field targets, so an indexed
+  call failed with `unsupported CALL_NATIVE target expression`, and the
+  construction validator's callee resolution could not see through the
+  receiver's ARRAY declared type.
+- Impact: `Expr::Index` call targets classify as function-block calls
+  with the whole index expression as dynamic receiver - any index
+  expression (literal or variable) dispatches exactly like a named FB
+  instance, and output (`=>`) arguments route through the indexed
+  element. The source-free construction validator unwraps Array types
+  to their element before the function-block match, keeping
+  param-direction validation (inputs as values, outputs as targets)
+  active for indexed receivers.
+- Mitigation: no storage-model change (elements were already
+  individually addressable instances). Scope note: calls through
+  dereferenced FB pointers (`pFb^(...)`) remain unsupported, and the
+  runtime execution of cross-program segmented `REF=` bindings that
+  reference indexed FB members stays covered by the DEV-034 mitigation
+  (compile-time admission only; live binding execution requires
+  program-instance reference addressing verification).

@@ -46929,3 +46929,23 @@ ignore_state = "not_ignored"
 disposition = "reviewed_nonmapping"
 reason_code = "no_reviewed_spec_or_invariant_binding"
 last_reviewed = "2026-10-30"
+
+[[reviews]]
+discovery_id = "DISC_C067E590182D4E37CE4B"
+discovery_source_kind = "rust_integration_test"
+path = "crates/trust-runtime/tests/e2e_full_grammar.rs"
+name = "indexed_fb_instance_call_lowers_and_dispatches"
+ignore_state = "not_ignored"
+disposition = "reviewed_nonmapping"
+reason_code = "no_reviewed_spec_or_invariant_binding"
+last_reviewed = "2026-10-31"
+
+[[reviews]]
+discovery_id = "DISC_B9BBCE6B8E0D3C6623BE"
+discovery_source_kind = "rust_integration_test"
+path = "crates/trust-runtime/tests/e2e_full_grammar.rs"
+name = "indexed_fb_instance_call_supports_variable_indices"
+ignore_state = "not_ignored"
+disposition = "reviewed_nonmapping"
+reason_code = "no_reviewed_spec_or_invariant_binding"
+last_reviewed = "2026-10-31"

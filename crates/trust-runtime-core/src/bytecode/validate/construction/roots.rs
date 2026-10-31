@@ -125,7 +125,18 @@ pub(super) fn validate_roots(
             if let Some(recorded) = tables.ref_type(id as u32, budget)?
                 && ty != Some(recorded)
             {
-                return Err(RejectionReason::InvalidConstructionRecord.into());
+                // Segmented REF= bindings (IEC_DEVIATIONS DEV-034) record
+                // the bound path as a REFERENCE to the leaf member while the
+                // computed path type is the leaf member itself; accept the
+                // recorded reference when it targets the computed type.
+                let recorded_targets_computed =
+                    match tables.types.entries.get(recorded as usize).map(|e| &e.data) {
+                        Some(TypeData::Reference { target_type_id }) => ty == Some(*target_type_id),
+                        _ => false,
+                    };
+                if !recorded_targets_computed {
+                    return Err(RejectionReason::InvalidConstructionRecord.into());
+                }
             }
         }
     }
