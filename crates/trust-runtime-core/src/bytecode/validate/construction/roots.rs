@@ -195,7 +195,23 @@ fn binding_type(
         {
             None
         }
-        None => return Err(RejectionReason::InvalidConstructionRecord.into()),
+        // ProgramRoot layout entries carry no type id (IEC_DEVIATIONS
+        // DEV-034): segmented references through a program instance are
+        // typed through the owning program's member declarations.
+        None => {
+            if layout.entries[declaration].role != StorageRole::ProgramRoot {
+                return Err(RejectionReason::InvalidConstructionRecord.into());
+            }
+            let owner = layout.entries[declaration]
+                .owner_pou_id
+                .ok_or(RejectionReason::InvalidConstructionRecord)?;
+            Some(declarations.program_member_path_type(
+                tables,
+                owner,
+                &reference.segments,
+                budget,
+            )?)
+        }
     };
     Ok((declaration, ty))
 }

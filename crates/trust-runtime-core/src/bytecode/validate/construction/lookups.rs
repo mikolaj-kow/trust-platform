@@ -211,6 +211,58 @@ impl<'a> DeclarationIndex<'a> {
         self.select_path(tables, ty, segments, budget, |_| Ok(()))
     }
 
+    /// Types a segmented reference whose root is a program instance
+    /// (IEC_DEVIATIONS DEV-034): ProgramRoot layout entries carry no type
+    /// id, so the first segment resolves through the owning program's
+    /// member declarations (base POUs walked like `select_path`'s member
+    /// lookup) and the remaining segments through `path_type`.
+    pub(super) fn program_member_path_type(
+        &self,
+        tables: &ValidationContext<'_>,
+        owner_pou_id: u32,
+        segments: &[RefSegment],
+        budget: &mut ValidationBudget,
+    ) -> Result<u32, BytecodeError> {
+        let Some((RefSegment::Field { name_idx }, rest)) = segments.split_first() else {
+            return Err(RejectionReason::InvalidConstructionRecord.into());
+        };
+        let name = tables
+            .strings
+            .entries
+            .get(*name_idx as usize)
+            .ok_or(RejectionReason::InvalidConstructionRecord)?
+            .as_str();
+        let mut owner = owner_pou_id;
+        let mut found = None;
+        for _ in 0..64 {
+            budget.work(1)?;
+            if let Ok(at) = budget.search_by(&self.fields, |entry, budget| {
+                Ok((entry.0, entry.1)
+                    .cmp(&(1, owner))
+                    .then(budget.compare_names(entry.2, name)?))
+            })? {
+                found = Some(at);
+                break;
+            }
+            let Some(parent) = tables
+                .pou(owner, budget)?
+                .and_then(|pou| pou.class_meta.as_ref())
+                .and_then(|meta| meta.parent_pou_id)
+            else {
+                break;
+            };
+            owner = parent;
+        }
+        let at = found.ok_or(RejectionReason::InvalidConstructionRecord)?;
+        if let Some(declaration) = self.fields[at].4 {
+            // The root member declaration participates in the construction
+            // graph like any member read.
+            budget.work(1)?;
+            let _ = declaration;
+        }
+        self.path_type(tables, self.fields[at].3, rest, budget)
+    }
+
     pub(super) fn select_path(
         &self,
         tables: &ValidationContext<'_>,
