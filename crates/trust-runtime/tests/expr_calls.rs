@@ -163,10 +163,16 @@ fn function_in_out_with_conversion_expression_regression_issue_13() {
         END_PROGRAM
     "#;
 
-    let err = TestHarness::from_source(source)
-        .err()
-        .expect("generic in-out lowering should fail under current VM constraints");
-    assert!(err.to_string().contains("unsupported generic type"));
+    let mut harness = TestHarness::from_source(source)
+        .expect("in-out lowering with conversion expressions compiles (DEV-033)");
+    let cycle = harness.cycle();
+    assert!(
+        cycle.errors.is_empty(),
+        "unexpected runtime errors: {:?}",
+        cycle.errors
+    );
+    // countDown stays FALSE, so incer2(i, 4, 0) runs: 100 + 4 - 0.
+    harness.assert_eq("i", 104u8);
 }
 
 #[test]
@@ -197,8 +203,13 @@ fn function_in_out_without_conversion_expression_baseline() {
         END_PROGRAM
     "#;
 
-    let err = TestHarness::from_source(source)
-        .err()
-        .expect("generic in-out lowering should fail under current VM constraints");
-    assert!(err.to_string().contains("unsupported generic type"));
+    let mut harness = TestHarness::from_source(source).expect("in-out lowering compiles (DEV-033)");
+    let cycle = harness.cycle();
+    assert!(
+        cycle.errors.is_empty(),
+        "unexpected runtime errors: {:?}",
+        cycle.errors
+    );
+    // countDown stays FALSE, so incer(i, 4, 0) runs: 100 + 4 - 0.
+    harness.assert_eq("i", 104u8);
 }
