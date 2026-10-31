@@ -183,6 +183,31 @@ impl<'a> BytecodeEncoder<'a> {
                     })
                 }
             }
+            crate::program_model::Expr::Index { target: base, .. } => {
+                // Indexed FB-instance invocation (`afbClickMode[0](xIn := ...)`):
+                // the receiver lowers through the dynamic index path and the VM
+                // dispatches FUNCTION_BLOCK calls on the element's runtime
+                // InstanceId, so any index expression (literal or variable)
+                // reaches the same dispatch as a named FB instance. FB-ness is
+                // inferred exactly like the Name arm: only FB instances are
+                // callable through array elements.
+                let mut root = base.as_ref();
+                while let crate::program_model::Expr::Field { target, .. }
+                    | crate::program_model::Expr::Index { target, .. } = root
+                {
+                    root = target.as_ref();
+                }
+                let name = if let crate::program_model::Expr::Name(name) = root {
+                    name.clone()
+                } else {
+                    SmolStr::new("")
+                };
+                Ok(NativeCallTarget {
+                    kind: NativeTargetKind::FunctionBlock,
+                    name,
+                    receiver: NativeReceiver::Expression(target),
+                })
+            }
             _ => Err(BytecodeError::InvalidSection(
                 "unsupported CALL_NATIVE target expression".into(),
             )),

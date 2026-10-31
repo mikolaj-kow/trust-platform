@@ -178,3 +178,82 @@ fn qualified_enum_member_as_call_argument_lowers() {
     );
     harness.assert_eq("result", 10i16);
 }
+
+#[test]
+fn indexed_fb_instance_call_lowers_and_dispatches() {
+    // Indexed FB-instance invocation: an FB instance stored in an array
+    // element is called through its index (`afb[2](xIn := ...)`). Each
+    // element is its own FB instance, so element states stay independent,
+    // and output (`=>`) arguments route through the indexed element.
+    let source = r#"
+        FUNCTION_BLOCK fbTag
+        VAR_INPUT
+            xIn : BOOL;
+        END_VAR
+        VAR_OUTPUT
+            q : BOOL;
+        END_VAR
+            q := xIn;
+        END_FUNCTION_BLOCK
+        PROGRAM Main
+        VAR
+            afb : ARRAY[0..3] OF fbTag;
+            viaOutput : BOOL;
+            out2 : BOOL;
+            out3 : BOOL;
+        END_VAR
+        afb[2](xIn := TRUE);
+        afb[3](xIn := FALSE, q => viaOutput);
+        out2 := afb[2].q;
+        out3 := afb[3].q;
+        END_PROGRAM
+    "#;
+
+    let mut harness = TestHarness::from_source(source).unwrap();
+    let cycle = harness.cycle();
+    assert!(
+        cycle.errors.is_empty(),
+        "unexpected runtime errors: {:?}",
+        cycle.errors
+    );
+    harness.assert_eq("out2", true);
+    harness.assert_eq("out3", false);
+    harness.assert_eq("viaOutput", false);
+}
+
+#[test]
+fn indexed_fb_instance_call_supports_variable_indices() {
+    // The index may be any expression: a FOR loop driving every element
+    // through its index dispatches each call to that element's instance.
+    let source = r#"
+        FUNCTION_BLOCK fbTag
+        VAR_INPUT
+            xIn : BOOL;
+        END_VAR
+        VAR_OUTPUT
+            q : BOOL;
+        END_VAR
+            q := xIn;
+        END_FUNCTION_BLOCK
+        PROGRAM Main
+        VAR
+            afb : ARRAY[0..3] OF fbTag;
+            i : INT;
+            allSet : BOOL;
+        END_VAR
+        FOR i := INT#0 TO INT#3 DO
+            afb[i](xIn := TRUE);
+        END_FOR
+        allSet := afb[0].q AND afb[1].q AND afb[2].q AND afb[3].q;
+        END_PROGRAM
+    "#;
+
+    let mut harness = TestHarness::from_source(source).unwrap();
+    let cycle = harness.cycle();
+    assert!(
+        cycle.errors.is_empty(),
+        "unexpected runtime errors: {:?}",
+        cycle.errors
+    );
+    harness.assert_eq("allSet", true);
+}

@@ -150,6 +150,10 @@ impl<'a> ValidationContext<'a> {
                 })?;
             match entry.data {
                 TypeData::Alias { target_type_id } => ty = target_type_id,
+                // Indexed FB-instance receivers (`afb[2](...)`): the declared
+                // receiver name is the ARRAY; the called POU is the element
+                // type's function block.
+                TypeData::Array { elem_type_id, .. } => ty = elem_type_id,
                 TypeData::Pou { pou_id } if entry.kind == TypeKind::FunctionBlock => {
                     return Ok(Some(pou_id))
                 }
