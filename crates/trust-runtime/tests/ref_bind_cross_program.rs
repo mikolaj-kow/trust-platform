@@ -1,4 +1,5 @@
 use trust_runtime::harness::TestHarness;
+use trust_runtime::value::Value;
 
 #[test]
 fn ref_bind_keyword_and_question_mark_spellings_agree() {
@@ -44,4 +45,46 @@ fn ref_assign_question_mark_still_binds_reference_values() {
     let mut harness = TestHarness::from_source(source).unwrap();
     harness.cycle();
     harness.assert_eq("out", 5i16);
+}
+
+#[test]
+#[ignore = "cross-program segmented REF= binding requires the C5 reference-attempt lowering path (encoder boundary); tracked as the layer-9 remainder"]
+fn ref_bind_binds_live_across_programs_through_gvl_array_element() {
+    // The s4 shape: each entity's REF member binds to another program's
+    // FB member once at config time; reads through the reference stay
+    // live afterwards (the FB member mutates every scan).
+    let source = r#"
+        TYPE SomeEvent : STRUCT x : BOOL; END_STRUCT; END_TYPE
+        TYPE Entity : STRUCT pEvent : REF_TO SomeEvent; END_STRUCT; END_TYPE
+        VAR_GLOBAL
+            astEntities : ARRAY[0..1] OF Entity;
+        END_VAR
+        PROGRAM InputRuntime
+        VAR
+            fbContact : SomeEvent;
+        END_VAR
+            fbContact.x := TRUE;
+        END_PROGRAM
+        PROGRAM BinSenConfig
+        VAR
+            wired : BOOL;
+        END_VAR
+            astEntities[0].pEvent REF= InputRuntime.fbContact;
+            wired := TRUE;
+        END_PROGRAM
+        PROGRAM Reader
+        VAR
+            seen : BOOL;
+        END_VAR
+            seen := astEntities[0].pEvent^.x;
+        END_PROGRAM
+    "#;
+
+    let mut harness = TestHarness::from_source(source).unwrap();
+    for _ in 0..3 {
+        harness.cycle();
+    }
+    harness.assert_eq("seen", true);
+    let entities = harness.get_output("astEntities").expect("missing astEntities");
+    assert!(matches!(entities, Value::Array(_)));
 }
