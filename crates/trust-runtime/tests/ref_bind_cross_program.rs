@@ -48,7 +48,7 @@ fn ref_assign_question_mark_still_binds_reference_values() {
 }
 
 #[test]
-#[ignore = "cross-program segmented REF= binding requires the C5 reference-attempt lowering path (encoder boundary); tracked as the layer-9 remainder"]
+#[ignore = "layer-9 remainder: the binding compiles and validates, but the runtime REFERENCE_ATTEMPT stores NULL - the segmented ProgramRoot-rooted reference needs a type-system ruling (pointee vs REF_TO typing + a pointee-vs-REF_TO arm in runtime_type_is_compatible); see s4/tmp/HANDOFF_VERIFICATION_PR117_2026-10-30.md"]
 fn ref_bind_binds_live_across_programs_through_gvl_array_element() {
     // The s4 shape: each entity's REF member binds to another program's
     // FB member once at config time; reads through the reference stay
@@ -85,6 +85,8 @@ fn ref_bind_binds_live_across_programs_through_gvl_array_element() {
         harness.cycle();
     }
     harness.assert_eq("seen", true);
-    let entities = harness.get_output("astEntities").expect("missing astEntities");
+    let entities = harness
+        .get_output("astEntities")
+        .expect("missing astEntities");
     assert!(matches!(entities, Value::Array(_)));
 }

@@ -9,8 +9,24 @@ impl<'a> BytecodeEncoder<'a> {
     ) -> Result<bool, BytecodeError> {
         let start_len = code.len();
         if !self.emit_expr(ctx, value, code)? {
+            if std::env::var("TRUST_CONST_TRACE").is_ok() {
+                eprintln!("TRACE attempt: value expr not emitted: {value:?}");
+            }
             code.truncate(start_len);
             return Ok(false);
+        }
+        // IEC_DEVIATIONS DEV-034: a segmented reference rooted at a
+        // program instance (the `REF=` value) needs its member type in
+        // VAR_META so the runtime's `dynamic_ref_type` can type the
+        // REFERENCE_ATTEMPT — without it the attempt stores NULL.
+        if let crate::program_model::Expr::Ref(lvalue) = value
+            && let Some(reference) = self.resolve_lvalue_ref(ctx, lvalue)?
+        {
+            self.construction
+                .bindings
+                .types
+                .entry(reference)
+                .or_insert(target_type);
         }
 
         let target_type_idx = self.type_index(target_type)?;
