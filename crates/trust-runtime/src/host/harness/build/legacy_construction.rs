@@ -27,6 +27,7 @@ impl LoweredApplication {
             mut program_access,
             configuration: config_model,
             source_metadata,
+            referenced_programs,
         } = self;
         let mut runtime = builder;
         if let Some(config) = config_model {
@@ -59,6 +60,11 @@ impl LoweredApplication {
                 &config.programs,
                 &extra_programs,
                 &config.using,
+                // The legacy import context keeps whatever admission its
+                // source compile recorded (DEV-032); a synthetic
+                // LoweredApplication contributes an empty set, restoring
+                // the strict binding guard.
+                &referenced_programs,
             )?;
             register_program_instances(
                 &mut runtime,

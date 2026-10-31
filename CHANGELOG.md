@@ -6,6 +6,24 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+- A declared PROGRAM referenced from a POU body is admitted without a
+  RESOURCE binding (the vendor declare-invoke pattern — the analyzer
+  already accepts cross-program invocation and flags only
+  never-referenced POUs as unused). Truly forgotten programs keep the
+  binding guard's diagnostic; see `IEC_DEVIATIONS.md` (DEV-032).
+- `TIME`/`TOD` literal interchange at expected-type coercion: a `TIME`
+  literal in a `TOD`-typed position (and the reverse, long forms
+  included) keeps its tag, and the runtime mixed-pair arithmetic
+  promotes natively — the vendor clock-adjust idiom
+  `TOD_value + offset + T#1H` lowers and executes instead of failing
+  with "expected TOD initializer"; see `IEC_DEVIATIONS.md` (DEV-031).
+- Qualified compile-time references resolve: dotted enum members
+  (`Namespace.EnumType.Member`, `EnumType.Member`) match the registered
+  enum type by exact or unique-suffix name, and flattened-library
+  constant references (`LogParameter.MAX_LOG_MSG_LEN` over
+  namespace-level constants) resolve when exactly one registered
+  constant carries the leaf. Bare names and ambiguous leaves keep the
+  strict error; see `IEC_DEVIATIONS.md` (DEV-030).
 - Empty named call arguments bind nothing: `RST := ,` omits the input
   (function-block instances retain their stored value, function
   parameters take the declared initializer) and `Q => ` without a target

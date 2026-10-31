@@ -64,7 +64,18 @@ impl<'a> BytecodeEncoder<'a> {
         id: u32,
     ) -> Result<PouEntry, BytecodeError> {
         let name_idx = self.strings.intern(func.name.clone());
-        let return_type_id = Some(self.type_index(func.return_type)?);
+        // CODESYS parity (IEC_DEVIATIONS DEV-033): a `: VOID` function has
+        // no return slot — callers do not capture a result, exactly like
+        // the no-return-slot POU kinds.
+        let is_void = matches!(
+            self.runtime.registry().get(func.return_type),
+            Some(trust_hir::Type::Void)
+        );
+        let return_type_id = if is_void {
+            None
+        } else {
+            Some(self.type_index(func.return_type)?)
+        };
         let params = self.encode_params(&func.params, ParamDefaultPolicy::CallLocal)?;
         Ok(PouEntry {
             id,
