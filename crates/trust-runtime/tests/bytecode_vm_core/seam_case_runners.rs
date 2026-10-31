@@ -7,7 +7,7 @@ use verification_cases::{
 
 const ENCODER_CASE_FILE: &str = "verification/cases/bytecode_vm/VM_SEAM_ENC_001.toml";
 const ENCODER_CASE_DIGEST: &str =
-    "sha256:e8b6b6a66e785c6bf7ffdf64fb7980c8a62c143c9169dc873e878b7322156f51";
+    "sha256:9bf3efe5017a8e1da2affce088ea67c5636326d3f50a72e5c13ae0f7a1793616";
 const ENCODER_TEST_ID: &str = "TEST_VM_ENCODER_FAIL_CLOSED_TRACE_001";
 
 #[test]
@@ -49,7 +49,7 @@ fn run_encoder_case(case: &CaseRecord, probe: &mut EncoderProbe) -> Result<CaseE
         "SUPPORTED_LOOP_CONTROL" => run_supported_loop_control()?,
         "UNSUPPORTED_STATEMENT" => reject_unsupported_statement()?,
         "UNSUPPORTED_EXPRESSION_AFTER_VALID_PREFIX" => reject_array_initializer_after_prefix()?,
-        "EXPLICIT_VOID_FUNCTION_RETURN_TYPE" => reject_explicit_void_function_return_type()?,
+        "EXPLICIT_VOID_FUNCTION_RETURN_TYPE" => run_explicit_void_function_return_type()?,
         other => return Err(format!("unreviewed encoder scenario {other}")),
     };
     probe.observed = Some(serde_json::json!({"scenario": scenario, "outcome": status}));
@@ -160,7 +160,7 @@ END_PROGRAM
     }
 }
 
-fn reject_explicit_void_function_return_type() -> Result<&'static str, String> {
+fn run_explicit_void_function_return_type() -> Result<&'static str, String> {
     let source = r#"
 FUNCTION incer : VOID
 VAR_IN_OUT
@@ -180,7 +180,23 @@ END_VAR
 incer(i, USINT#4, USINT#0);
 END_PROGRAM
 "#;
-    expect_lowering_rejection(source, "unsupported generic type")
+    let module = bytecode_module_from_source(source)
+        .map_err(|error| format!("void-return source failed bytecode lowering: {error}"))?;
+    module
+        .validate()
+        .map_err(|error| format!("void-return module failed validation: {error}"))?;
+    let mut harness = vm_harness_from_module(source, &module);
+    let cycle = harness.cycle();
+    if !cycle.errors.is_empty() {
+        return Err(format!("void-return execution failed: {:?}", cycle.errors));
+    }
+    let observed = harness.get_output("i");
+    if observed != Some(Value::USInt(104)) {
+        return Err(format!(
+            "expected in-out mutation i = USINT#104, observed {observed:?}"
+        ));
+    }
+    Ok("accepted_and_executed")
 }
 
 fn expect_lowering_rejection(source: &str, expected_message: &str) -> Result<&'static str, String> {

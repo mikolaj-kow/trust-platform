@@ -176,18 +176,14 @@ impl<'a> BytecodeEncoder<'a> {
         // (`GVLEntities.astEntitiesBinSen` over a namespaced GVL). Try the
         // dotted name before the per-segment walk; the segments then apply
         // to the resolved global (index/field suffixes below).
-        match target {
-            LValue::Field { .. } => {
-                if let Some(qualified) = target.qualified_name()
-                    && let Some(reference) = self.resolve_name_ref(ctx, &qualified)?
-                {
-                    let ref_idx = self.ref_index_for(&reference)?;
-                    code.push(0x22);
-                    code.extend_from_slice(&ref_idx.to_le_bytes());
-                    return Ok(true);
-                }
-            }
-            _ => {}
+        if let LValue::Field { .. } = target
+            && let Some(qualified) = target.qualified_name()
+            && let Some(reference) = self.resolve_name_ref(ctx, &qualified)?
+        {
+            let ref_idx = self.ref_index_for(&reference)?;
+            code.push(0x22);
+            code.extend_from_slice(&ref_idx.to_le_bytes());
+            return Ok(true);
         }
         match target {
             LValue::Name(name) => self.emit_ref_for_name(ctx, name, code),

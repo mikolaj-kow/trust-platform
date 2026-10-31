@@ -8,7 +8,7 @@ invariant = "VM_SEAM_ENC_001"
 generator = "gen_cases.py v1"
 generator_digest = "sha256:72778cbbe0dfdeb8945fab41987ce77a8d81ed8c1d18f2a2d77fa8ce5a2934a3"
 source_digest = "sha256:978fc6ac001ef7a3acf07593cb4c4f254b1782c01e884e481aca4f32f820e7fc"
-last_reviewed = "2026-07-30"
+last_reviewed = "2026-10-31"
 
 [[case]]
 id = "VM_SEAM_ENC_001_SUPPORTED_LOOP_CONTROL_D29CD0E7"
@@ -30,6 +30,6 @@ expect = { outcome = "reject", delta = { target = "unchanged", siblings = "uncha
 
 [[case]]
 id = "VM_SEAM_ENC_001_EXPLICIT_VOID_FUNCTION_RETURN_TYPE_DB94B863"
-family = "extra_or_unknown"
+family = "happy_path"
 input = { source_partition = { equals = "EXPLICIT_VOID_FUNCTION_RETURN_TYPE" }, scenario = "EXPLICIT_VOID_FUNCTION_RETURN_TYPE" }
-expect = { outcome = "reject", delta = { target = "unchanged", siblings = "unchanged", retain = "unchanged", process_image = "unchanged", diagnostics = "expected_diagnostic", status = "unchanged" }, no_partial_apply = true, oracle_ref = "SPEC_BYTECODE_FORMAT_001#7-6-source-to-bytecode-fail-closed-boundary" }
+expect = { outcome = "accept_value", delta = { target = "set_to_expected", siblings = "unchanged", retain = "unchanged", process_image = "unchanged", diagnostics = "none", status = "unchanged" }, oracle_ref = "SPEC_BYTECODE_FORMAT_001#7-6-source-to-bytecode-fail-closed-boundary" }
